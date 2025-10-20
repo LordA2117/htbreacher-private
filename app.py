@@ -11,7 +11,7 @@ import json
 load_dotenv()
 
 api_key = os.getenv("OLLAMA_API_KEY")
-print(api_key)
+# print(api_key)
 
 with open("settings.json", mode="r") as file:
     data = json.load(file)
