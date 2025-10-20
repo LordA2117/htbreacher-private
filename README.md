@@ -13,3 +13,5 @@ Create the venv and install all dependencies
 If you don't have ollama install it and then do `ollama pull openhermes`
 
 After that run this thing so that it.... you know, runs
+
+Also have an ollama api key so that you can use the cloud (which this does btw)
