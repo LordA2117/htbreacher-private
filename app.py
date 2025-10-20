@@ -33,7 +33,7 @@ knowledge.add_content(text_content=knowledge_content)
 htb_agent = Agent(
     model=Ollama(id="deepseek-v3.1:671b-cloud"),
     markdown=True,
-    knowledge=knowledge,
+    # knowledge=knowledge,
     instructions=[
         "Always check your knowledge base for answers. It is your primary source of information. You are an agent with the knowledge to perform attacks based on the Knowledge Base I provided. If it doesn't exist here, check your own knowledge base, but specify that you did so."
     ],
@@ -44,4 +44,4 @@ agent_os = AgentOS(agents=[htb_agent])
 app = agent_os.get_app()
 
 if __name__ == "__main__":
-    agent_os.serve(app="htb_agent:app", reload=True)
+    agent_os.serve(app=app)
