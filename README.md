@@ -12,6 +12,8 @@ Create the venv and install all dependencies
 
 If you don't have ollama install it and then do `ollama pull openhermes`
 
+I use qwen for the local model as of now
+
 After that run this thing so that it.... you know, runs
 
 Also have an ollama api key so that you can use the cloud (which this does btw)
@@ -19,9 +21,17 @@ Also have an ollama api key so that you can use the cloud (which this does btw)
 ## GUI
 
 To get the GUI see this [link](https://github.com/agno-agi/agent-ui)
+
 Run the GUI after the CLI is done compiling
 
 ## Usage of CLI
 
 To update the kb run scraper.py
-Then run the normal app.py
+
+Then run the normal app.py to use the offline models, in this mode, u cant use online models
+
+To use the online models do `python app.py online` in this mode you cant use offline models
+
+## Helpful links
+
+[1](https://docs.ollama.com/cloud)
