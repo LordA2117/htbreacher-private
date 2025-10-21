@@ -18,6 +18,8 @@ After that run this thing so that it.... you know, runs
 
 Also have an ollama api key so that you can use the cloud (which this does btw)
 
+Another thing, there is a line of code for adding content to the knowledge base in `app.py`. Uncomment it and run it only when running the program for the first time. After this, comment it back out. This is meant to be used only after the knowledge base is updated by the scraper.
+
 ## GUI
 
 To get the GUI see this [link](https://github.com/agno-agi/agent-ui)
