@@ -32,7 +32,7 @@ To update the kb run scraper.py
 
 Then run the normal app.py to use the offline models, in this mode, u cant use online models
 
-To use the online models do `python app.py online` in this mode you cant use offline models
+To use the online models do `python app.py online` in this mode you cant use offline models, gemini and deepseek seem to perform best as of now.
 
 ## Helpful links
 

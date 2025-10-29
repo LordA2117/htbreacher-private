@@ -5,6 +5,7 @@ from agno.models.ollama import Ollama
 from agno.models.google import Gemini
 from dotenv import load_dotenv
 from agno.knowledge.embedder.ollama import OllamaEmbedder
+from agno.knowledge.embedder.google import GeminiEmbedder
 from agno.os import AgentOS
 from agno.db.sqlite import SqliteDb
 from agno.knowledge.reader.text_reader import TextReader
@@ -41,9 +42,15 @@ memories_db = SqliteDb("tmp/data.db")
 
 knowledge = Knowledge(
     vector_db=LanceDb(
-        table_name="knowledge_documents",
+        table_name="ollama_embeddings",
         embedder=OllamaEmbedder(id="openhermes"),
         uri="tmp/lancedb",  # Local directory for storage
+    ),
+)  # Ollama knowledge
+
+gemini_knowledge = Knowledge(
+    vector_db=LanceDb(
+        table_name="gemini_embeddings", embedder=GeminiEmbedder(), uri="tmp/lancedb"
     ),
 )
 
@@ -52,6 +59,13 @@ knowledge = Knowledge(
 #     text_content=knowledge_content,
 #     reader=TextReader(chunk=True, chunking_strategy=RecursiveChunking()),
 # )
+
+# Uncomment this line if you don't have the knowledge base setup
+# gemini_knowledge.add_content(
+#     text_content=knowledge_content,
+#     reader=TextReader(chunk=True, chunking_strategy=RecursiveChunking()),
+# )
+
 
 htb_agent = Agent(
     model=Ollama(id="deepseek-v3.1:671b-cloud"),
@@ -90,7 +104,7 @@ htb_agent_gemini = Agent(
     add_knowledge_to_context=True,
     db=memories_db,
     tools=tool_set,
-    knowledge=knowledge,
+    knowledge=gemini_knowledge,
 )
 
 
