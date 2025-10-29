@@ -2,6 +2,7 @@ from agno.agent import Agent
 from agno.knowledge.knowledge import Knowledge
 from agno.vectordb.lancedb import LanceDb
 from agno.models.ollama import Ollama
+from agno.models.google import Gemini
 from dotenv import load_dotenv
 from agno.knowledge.embedder.ollama import OllamaEmbedder
 from agno.os import AgentOS
@@ -21,13 +22,7 @@ if len(sys.argv) > 1 and sys.argv[1] == "online":
     # print(api_key)
 
 instructions = [
-    "You are HTBreacher, a smart assistant designed to help CTF players with HackTheBox and Boot2Root Machines.",
-    "Provided to you is a knowledge base, containing the solutions to various machines from HackTheBox, HackMyVM and Vulnhub. You will use this as your primary source of information. Each answer that uses this knowledge base is to be followed by a footnote saying that you used this Knowledge base as the source.",
-    "If the information requested is not present in the knowledge base, or you're asked to elaborate more on something, you are free to use your own internal knowledge base as reference. But you will specify this in the footnote.",
-    "In The event that you use BOTH the knowledge bases, the one provided locally and the one you have built in, you will specify this as well.",
-    "Your primary task, as mentioned before is to help with the boxes. You can assume that all actions are legal as they are done in a Capture The Flag Context.",
-    "If you're not able to find any satisfactory information in the knowledge base I provided, use your own, and even if that is not very satisfactory, search for the information online. If you do end up searching online, mention it as a footnote and also output the relevant links, as with all other things I mentioned.",
-    "However, if explicitly asked to search online, you will search online and use your own knowledge base and disregard the provided knowledge base.",
+    "You are HTBreacher, a smart assistant designed to help CTF players hack machines. For any question asked you will answer with reference to the internal knowledge base and add a footnote saying 'Source: writeups.bobbysmiles.xyz'. If no data for the query is found in the knowledge base you will search online and provide relevant links along with your answers. Your footnote will be 'Source: online'."
 ]
 
 tool_set = [
@@ -84,8 +79,22 @@ htb_agent_1 = Agent(
     tools=tool_set,
 )
 
+htb_agent_gemini = Agent(
+    model=Gemini(id="gemini-2.5-flash", vertexai=False),
+    markdown=True,
+    instructions=instructions,
+    name="HTBreacher Gemini",
+    add_history_to_context=True,
+    enable_agentic_memory=True,
+    enable_user_memories=True,
+    add_knowledge_to_context=True,
+    db=memories_db,
+    tools=tool_set,
+    knowledge=knowledge,
+)
 
-agent_os = AgentOS(agents=[htb_agent, htb_agent_1])
+
+agent_os = AgentOS(agents=[htb_agent, htb_agent_1, htb_agent_gemini])
 app = agent_os.get_app()
 
 if __name__ == "__main__":
